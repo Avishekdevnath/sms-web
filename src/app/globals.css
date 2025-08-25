@@ -1,26 +1,214 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* Theme tokens (Tailwind v4) */
+@theme {
+  --color-primary: #2563eb;            /* blue-600 */
+  --color-primary-foreground: #ffffff;
+  --color-bg: #ffffff;
+  --color-fg: #111827;                 /* gray-900 */
+  --color-muted: #6b7280;              /* gray-500 */
+  --color-border: #e5e7eb;             /* gray-200 */
+  --radius-sm: 6px;
+  --radius-md: 10px;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+:root { color-scheme: light; }
+
+html, body { height: 100%; }
+body { background-color: var(--color-bg); color: var(--color-fg); }
+
+/* App-wide utility styles */
+.container-page { @apply max-w-6xl mx-auto px-4; }
+.btn { @apply inline-flex items-center justify-center px-4 py-2 rounded-md border text-sm transition-colors duration-200; border-color: var(--color-border); }
+.btn-primary { @apply bg-black text-white hover:bg-gray-800; }
+.btn-secondary { @apply bg-white text-black border border-gray-300 hover:border-black; }
+.btn-danger { @apply bg-gray-800 text-white hover:bg-gray-900; }
+.btn-sm { @apply px-2 py-1 text-xs; }
+.card { @apply border border-gray-200 rounded-lg p-6 bg-white; }
+.input { @apply w-full border border-gray-300 rounded-lg px-3 py-2 text-sm transition-colors duration-200 focus:outline-none focus:border-black; }
+.table { @apply w-full border border-collapse text-sm; border-color: var(--color-border); }
+.table th { @apply text-left border px-3 py-2 font-medium; border-color: var(--color-border); }
+.table td { @apply border px-3 py-2; border-color: var(--color-border); }
+.badge { @apply inline-flex items-center px-2 py-1 rounded-full text-xs font-medium; }
+.badge-primary { @apply bg-black text-white; }
+.badge-secondary { @apply bg-gray-100 text-gray-700; }
+
+/* Header & Sidebar */
+.app-header { @apply h-[56px] border-b flex items-center justify-between px-4; border-color: var(--color-border); }
+.app-sidebar { @apply border-r p-3 space-y-1; border-color: var(--color-border); }
+.app-navlink { @apply block px-3 py-2 rounded-md hover:bg-gray-100 transition-colors duration-200; }
+
+/* Enhanced component styles */
+.drag-drop-zone {
+  @apply border-2 border-dashed rounded-lg p-8 text-center transition-all duration-200 cursor-pointer;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+.drag-drop-zone:hover {
+  @apply border-gray-400 bg-gray-100;
+}
+
+.drag-drop-zone.drag-over {
+  @apply border-blue-500 bg-blue-100;
+}
+
+.drag-drop-zone.processing {
+  @apply opacity-50 cursor-not-allowed;
+}
+
+/* Progress indicator enhancements */
+.progress-step {
+  @apply transition-all duration-200;
+}
+
+.progress-step.current {
+  @apply scale-110;
+}
+
+.progress-step.completed {
+  @apply shadow-sm;
+}
+
+/* Email validation styles */
+.validation-card {
+  @apply border rounded-lg p-4 transition-colors duration-200;
+}
+
+.validation-card.valid {
+  @apply bg-green-100 border-green-200;
+}
+
+.validation-card.duplicate {
+  @apply bg-orange-100 border-orange-200;
+}
+
+.validation-card.invalid {
+  @apply bg-red-100 border-red-200;
+}
+
+.validation-card.existing {
+  @apply bg-yellow-100 border-yellow-200;
+}
+
+.validation-card.pending {
+  @apply bg-blue-100 border-blue-200;
+}
+
+/* Enrollment preview styles */
+.preview-summary {
+  @apply grid grid-cols-1 md:grid-cols-4 gap-4;
+}
+
+.preview-card {
+  @apply border rounded-lg p-4 transition-all duration-200 hover:shadow-sm;
+}
+
+/* Modal animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.2s ease-out;
+}
+
+.animate-slideIn {
+  animation: slideIn 0.3s ease-out;
+}
+
+.preview-card:hover {
+  @apply transform translate-y-[-1px];
+}
+
+/* File upload styles */
+.file-info {
+  @apply bg-gray-100 rounded-lg p-4 transition-all duration-200;
+}
+
+.file-info:hover {
+  @apply bg-gray-100;
+}
+
+/* Loading animations */
+.loading-spinner {
+  @apply animate-spin rounded-full border-b-2 border-blue-500;
+}
+
+.loading-dots {
+  @apply inline-flex space-x-1;
+}
+
+.loading-dots > div {
+  @apply w-2 h-2 bg-gray-400 rounded-full animate-bounce;
+}
+
+.loading-dots > div:nth-child(2) {
+  animation-delay: 0.1s;
+}
+
+.loading-dots > div:nth-child(3) {
+  animation-delay: 0.2s;
+}
+
+/* Responsive improvements */
+@media (max-width: 768px) {
+  .preview-summary {
+    @apply grid-cols-2;
+  }
+  
+  .drag-drop-zone {
+    @apply p-4;
+  }
+  
+  .card {
+    @apply p-3;
+  }
+}
+
+/* Focus states for accessibility */
+.btn:focus,
+.input:focus,
+select:focus {
+  @apply outline-none ring-2 ring-blue-500 ring-offset-2;
+}
+
+/* Custom scrollbar for email lists */
+.email-list {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f1f5f9;
+}
+
+.email-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.email-list::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 3px;
+}
+
+.email-list::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+.email-list::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }
