@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connectToDatabase } from '@/lib/mongodb';
 import { Mission } from '@/models/Mission';
+import { getAuthUserFromRequest, requireRoles } from '@/lib/rbac';
+import { MissionUpdateSchema, MissionStatusUpdateSchema } from '@/schemas/mission';
+import { createSuccessResponse, createErrorResponse, handleApiError } from '@/utils/apiHelpers';
 
 export async function GET(
   request: NextRequest,
@@ -14,22 +17,101 @@ export async function GET(
       .populate('batchId', 'code title')
       .populate('students.studentId', 'name email studentId')
       .populate('students.mentorId', 'name email')
+      .populate({
+        path: 'courses.courseOfferingId',
+        populate: {
+          path: 'courseId',
+          select: 'title code'
+        }
+      })
+      .populate('createdBy', 'name email')
       .lean();
 
     if (!mission) {
-      return NextResponse.json(
-        { error: { message: 'Mission not found' } },
-        { status: 404 }
-      );
+      return createErrorResponse('Mission not found', 404);
     }
 
-    return NextResponse.json(mission);
+    return createSuccessResponse(mission);
   } catch (error) {
-    console.error('Error fetching mission:', error);
-    return NextResponse.json(
-      { error: { message: 'Internal server error' } },
-      { status: 500 }
-    );
+    return handleApiError(error);
+  }
+}
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    await connectToDatabase();
+    
+    // Check authentication and authorization
+    const me = await getAuthUserFromRequest(request);
+    requireRoles(me, ["admin", "manager", "sre"]);
+    
+    const { id } = await params;
+    const body = await request.json();
+    
+    // Check if this is a status-only update
+    if (Object.keys(body).length === 1 && body.status) {
+      const validatedData = MissionStatusUpdateSchema.parse(body);
+      
+      const mission = await Mission.findByIdAndUpdate(
+        id,
+        { status: validatedData.status },
+        { new: true }
+      )
+      .populate('batchId', 'code title')
+      .populate('students.studentId', 'name email')
+      .populate('students.mentorId', 'name email')
+      .populate({
+        path: 'courses.courseOfferingId',
+        populate: {
+          path: 'courseId',
+          select: 'title code'
+        }
+      })
+      .populate('createdBy', 'name email')
+      .lean();
+      
+      if (!mission) {
+        return createErrorResponse('Mission not found', 404);
+      }
+      
+      return createSuccessResponse(mission, 'Mission status updated successfully');
+    }
+    
+    // Full mission update
+    const validatedData = MissionUpdateSchema.parse(body);
+    
+    const updates: any = { ...validatedData };
+    if (validatedData.startDate) updates.startDate = new Date(validatedData.startDate);
+    if (validatedData.endDate) updates.endDate = new Date(validatedData.endDate);
+    
+    const mission = await Mission.findByIdAndUpdate(
+      id,
+      updates,
+      { new: true }
+    )
+    .populate('batchId', 'code title')
+    .populate('students.studentId', 'name email')
+    .populate('students.mentorId', 'name email')
+    .populate({
+      path: 'courses.courseOfferingId',
+      populate: {
+        path: 'courseId',
+        select: 'title code'
+      }
+    })
+    .populate('createdBy', 'name email')
+    .lean();
+    
+    if (!mission) {
+      return createErrorResponse('Mission not found', 404);
+    }
+    
+    return createSuccessResponse(mission, 'Mission updated successfully');
+  } catch (error) {
+    return handleApiError(error);
   }
 }
 
@@ -40,27 +122,26 @@ export async function DELETE(
   try {
     await connectToDatabase();
     
+    // Check authentication and authorization
+    const me = await getAuthUserFromRequest(req);
+    requireRoles(me, ["admin", "manager", "sre"]);
+    
     const { id } = await params;
     const mission = await Mission.findById(id);
     if (!mission) {
-      return NextResponse.json({ error: { message: "Mission not found" } }, { status: 404 });
+      return createErrorResponse("Mission not found", 404);
     }
     
     // Check if mission has active students
     const hasActiveStudents = mission.students.some(student => student.status === 'active');
     if (hasActiveStudents) {
-      return NextResponse.json({ 
-        error: { 
-          message: "Cannot delete mission with active students. Please archive it instead." 
-        } 
-      }, { status: 400 });
+      return createErrorResponse("Cannot delete mission with active students. Please archive it instead.", 400);
     }
     
     await Mission.findByIdAndDelete(id);
     
-    return NextResponse.json({ message: "Mission deleted successfully" });
+    return createSuccessResponse(null, "Mission deleted successfully");
   } catch (error) {
-    console.error('Error deleting mission:', error);
-    return NextResponse.json({ error: { message: "Internal server error" } }, { status: 500 });
+    return handleApiError(error);
   }
 } 

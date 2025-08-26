@@ -4,8 +4,12 @@ export const MissionCreateSchema = z.object({
   title: z.string().min(1, "Title is required").max(200, "Title must be less than 200 characters"),
   description: z.string().optional(),
   batchId: z.string().min(1, "Batch is required"),
-  startDate: z.string().datetime("Invalid start date").optional(),
-  endDate: z.string().datetime("Invalid end date").optional(),
+  startDate: z.string().refine((val) => val === "" || !isNaN(Date.parse(val)), {
+    message: "Invalid start date format"
+  }).optional(),
+  endDate: z.string().refine((val) => val === "" || !isNaN(Date.parse(val)), {
+    message: "Invalid end date format"
+  }).optional(),
   maxStudents: z.number().min(1, "Max students must be at least 1").optional(),
   requirements: z.array(z.string()).optional(),
   rewards: z.array(z.string()).optional(),

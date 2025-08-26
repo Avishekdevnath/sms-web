@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
     .populate('semesterId', 'number title')
     .lean();
     
-  return Response.json({ data });
+  return Response.json({ courseOfferings: data });
 }
 
 export async function POST(req: NextRequest) {

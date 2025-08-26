@@ -5,14 +5,16 @@ import { StudentBatchMembership } from "@/models/StudentBatchMembership";
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await connectToDatabase();
     
+    const { id } = await params;
+    
     // Get all student memberships for this batch
     const memberships = await StudentBatchMembership.find({ 
-      batchId: params.id 
+      batchId: id 
     }).populate('studentId', 'name email userId role createdAt').lean();
     
     // Extract student data from memberships

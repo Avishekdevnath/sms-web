@@ -1,4 +1,4 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { Mission } from "@/models/Mission";
 import { User } from "@/models/User"; // Import User model to register schema
@@ -74,7 +74,13 @@ export async function GET(req: NextRequest) {
       Mission.find(filter)
         .populate('createdBy', 'name email')
         .populate('batchId', 'code title')
-        .populate('courses.courseOfferingId', 'courseId batchId semesterId')
+        .populate({
+          path: 'courses.courseOfferingId',
+          populate: {
+            path: 'courseId',
+            select: 'title code'
+          }
+        })
         .populate('students.studentId', 'name email')
         .populate('students.mentorId', 'name email')
         .sort(sort)
@@ -88,7 +94,14 @@ export async function GET(req: NextRequest) {
     const transformedMissions = missions.map(mission => transformMongoResponse(mission)) as MissionWithDetails[];
     const pagination = calculatePagination(page, limit, total);
     
-    return createPaginatedResponse(transformedMissions, pagination);
+    // Return in the format expected by the frontend
+    return NextResponse.json({
+      missions: transformedMissions,
+      total,
+      page,
+      limit,
+      totalPages: pagination.totalPages
+    });
   } catch (error) {
     return handleApiError(error);
   }
@@ -111,8 +124,8 @@ export async function POST(req: NextRequest) {
     const missionData = {
       ...validatedData,
       code: missionCode,
-      startDate: validatedData.startDate ? new Date(validatedData.startDate) : undefined,
-      endDate: validatedData.endDate ? new Date(validatedData.endDate) : undefined,
+      startDate: validatedData.startDate && validatedData.startDate.trim() !== "" ? new Date(validatedData.startDate) : undefined,
+      endDate: validatedData.endDate && validatedData.endDate.trim() !== "" ? new Date(validatedData.endDate) : undefined,
       createdBy: me!._id,
     };
     
@@ -123,6 +136,7 @@ export async function POST(req: NextRequest) {
     
     return createSuccessResponse(transformedMission, "Mission created successfully");
   } catch (error) {
+    console.error('POST /api/missions - Error:', error);
     return handleApiError(error);
   }
 }
@@ -143,8 +157,8 @@ export async function PATCH(req: NextRequest) {
     const validatedData = MissionUpdateSchema.parse(body);
     
     const updates: any = { ...validatedData };
-    if (validatedData.startDate) updates.startDate = new Date(validatedData.startDate);
-    if (validatedData.endDate) updates.endDate = new Date(validatedData.endDate);
+    if (validatedData.startDate && validatedData.startDate.trim() !== "") updates.startDate = new Date(validatedData.startDate);
+    if (validatedData.endDate && validatedData.endDate.trim() !== "") updates.endDate = new Date(validatedData.endDate);
     
     const mission = await Mission.findByIdAndUpdate(id, updates, { new: true })
       .populate('createdBy', 'name email')

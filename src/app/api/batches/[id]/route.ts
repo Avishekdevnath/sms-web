@@ -4,12 +4,13 @@ import { Batch } from "@/models/Batch";
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await connectToDatabase();
     
-    const batch = await Batch.findById(params.id).lean();
+    const { id } = await params;
+    const batch = await Batch.findById(id).lean();
     
     if (!batch) {
       return NextResponse.json(
@@ -30,7 +31,7 @@ export async function GET(
 
 export async function PUT(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await connectToDatabase();
@@ -45,10 +46,12 @@ export async function PUT(
       );
     }
     
+    const { id } = await params;
+    
     // Check if code already exists (excluding current batch)
     const existingBatch = await Batch.findOne({ 
       code, 
-      _id: { $ne: params.id } 
+      _id: { $ne: id } 
     });
     
     if (existingBatch) {
@@ -59,7 +62,7 @@ export async function PUT(
     }
     
     const batch = await Batch.findByIdAndUpdate(
-      params.id,
+      id,
       { code, title },
       { new: true, runValidators: true }
     );
@@ -83,12 +86,13 @@ export async function PUT(
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await connectToDatabase();
     
-    const batch = await Batch.findByIdAndDelete(params.id);
+    const { id } = await params;
+    const batch = await Batch.findByIdAndDelete(id);
     
     if (!batch) {
       return NextResponse.json(

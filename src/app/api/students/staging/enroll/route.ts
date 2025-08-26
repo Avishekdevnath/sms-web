@@ -4,7 +4,7 @@ import { can } from '@/lib/rbac';
 import { StagingEmail } from '@/models/StagingEmail';
 import { User } from '@/models/User';
 import { EnrollmentBatch } from '@/models/EnrollmentBatch';
-import { generateNextStudentId } from '@/lib/studentIdGenerator';
+import { generateStudentId } from '@/lib/studentIdGenerator';
 import { connectToDatabase } from '@/lib/mongodb';
 import bcrypt from 'bcryptjs';
 
@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
         }
 
         // Generate student ID
-        const studentId = generateNextStudentId(parseInt(batch.code), existingStudentIds);
+        const studentId = await generateStudentId(batchId);
         existingStudentIds.push(studentId);
 
         // Generate temporary password

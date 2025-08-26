@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
     ]);
     
     return NextResponse.json({
-      data: batches,
+      batches,
       total,
       page,
       limit,

@@ -90,14 +90,22 @@ export default function AdminMissionsPage() {
       });
 
       if (response.ok) {
-        setMissions(prev => prev.map(m => 
-          m._id === missionId ? { ...m, status: newStatus as any } : m
-        ));
+        const data = await response.json();
+        if (data.success && data.data) {
+          setMissions(prev => prev.map(m => 
+            m._id === missionId ? { ...m, status: data.data.status } : m
+          ));
+        } else {
+          console.error('Invalid response format:', data);
+        }
       } else {
-        console.error('Failed to update mission status:', response.status, response.statusText);
+        const error = await response.json();
+        console.error('Failed to update mission status:', error);
+        alert(`Failed to update mission status: ${error.error?.message || 'Unknown error'}`);
       }
     } catch (error) {
       console.error('Error updating mission status:', error);
+      alert('Failed to update mission status');
     }
   };
 
@@ -116,12 +124,21 @@ export default function AdminMissionsPage() {
       });
 
       if (response.ok) {
-        setMissions(prev => prev.filter(m => m._id !== missionId));
+        const data = await response.json();
+        if (data.success) {
+          setMissions(prev => prev.filter(m => m._id !== missionId));
+          alert('Mission deleted successfully');
+        } else {
+          console.error('Invalid response format:', data);
+        }
       } else {
-        console.error('Failed to delete mission:', response.status, response.statusText);
+        const error = await response.json();
+        console.error('Failed to delete mission:', error);
+        alert(`Failed to delete mission: ${error.error?.message || 'Unknown error'}`);
       }
     } catch (error) {
       console.error('Error deleting mission:', error);
+      alert('Failed to delete mission');
     }
   };
 

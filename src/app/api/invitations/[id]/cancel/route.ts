@@ -5,14 +5,15 @@ import { getAuthUserFromRequest, requireRoles } from "@/lib/rbac";
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await connectToDatabase();
     const me = await getAuthUserFromRequest(req);
     requireRoles(me, ["admin", "developer", "manager"]);
 
-    const invitationId = params.id;
+    const { id } = await params;
+    const invitationId = id;
 
     // Find the invitation
     const invitation = await Invitation.findById(invitationId);
