@@ -2,7 +2,45 @@
 
 A comprehensive, production-ready Student Management System built with Next.js 15, TypeScript, and MongoDB. This system provides complete student enrollment, management, and administrative capabilities with role-based access control.
 
+## 🆕 What's New
+
+- Communication Hub updates
+  - Back buttons added to Guideline and Coding zones
+  - Coding Zone now mirrors Guideline Zone, with detail pages at `/mission-communication-hub/helpzone/coding/[postId]`
+  - Sidebar simplified: concise labels and category text for non-links
+- Admin sidebar labels simplified: "Students", "Moderators", "Assignments" (removed "Management")
+- Mission Overview counts now use Mission V2 aggregate fields (`totalStudents`, `totalMentors`, `totalGroups`) with Redux fallbacks
+- Counts on dashboards now sourced from correct APIs
+  - Students: `/api/students` (uses `pagination.total` when available)
+  - Courses: `/api/courses` (`total`)
+  - Active Missions: `/api/v2/missions?status=active` (uses `pagination.total`)
+  - Assignments: `/api/assignments` (`total`, pending derived from unpublished/unsubmitted)
+
 ## 🚀 Features
+
+### Functional Areas
+
+#### Dashboard
+- Live totals: Students, Courses, Active Missions, Pending Assignments
+- Quick actions to Students, Missions, Courses, Assignments
+- Recent activity feed
+- Admin/role-aware navigation and simplified sidebar labels
+
+#### Missions (Mission Hub)
+- Mission context selector and Mission Overview
+- V2-backed counts: `totalStudents`, `totalMentors`, `totalGroups` with client fallbacks
+- Students: assign, manage, and view capacity usage per mission
+- Mentors: list, status, workload; assign students to mentors
+- Mentorship Groups: create/list/analyze groups; student/mentor membership
+- Analytics: mission/group-level trends and summaries
+
+#### Communication Hub
+- Channels for Announcements, Guideline Session, Resources (mission-wide)
+- Admin channels for messaging/resources (admins/mentors)
+- Helpzone with Guideline and Coding zones
+  - Search and status filter, markdown content, comments/replies
+  - Detail pages: `/mission-communication-hub/helpzone/guideline/[postId]` and `/helpzone/coding/[postId]`
+  - Back buttons and simplified sidebar (category text for non-links)
 
 ### Core Functionality
 - **Complete Authentication System** - JWT-based authentication with role-based access control
