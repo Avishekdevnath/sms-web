@@ -34,8 +34,12 @@ yarn-error.log*
 .env*
 
 # docs (hide from repo)
-/docs/
+/.docs/
 /docs/**
+
+# docs (hide from repo)
+/.instructions/
+/.instructions/**
 
 # vercel
 .vercel
