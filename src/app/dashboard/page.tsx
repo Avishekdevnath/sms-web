@@ -37,6 +37,56 @@ async function getCurrentUser() {
 export default async function DashboardPage() {
   const user = await getCurrentUser();
   
+  async function getStats() {
+    try {
+      const cs = await cookies();
+      const cookie = cs.getAll().map(({ name, value }) => `${name}=${value}`).join("; ");
+      const [studentsRes, coursesRes, missionsRes, assignmentsRes] = await Promise.all([
+        fetch(`${BASE}/api/students?limit=1`, { headers: { cookie }, cache: "no-store" }),
+        fetch(`${BASE}/api/courses?limit=1`, { headers: { cookie }, cache: "no-store" }),
+        fetch(`${BASE}/api/v2/missions?status=active&limit=1`, { headers: { cookie }, cache: "no-store" }),
+        fetch(`${BASE}/api/assignments?limit=1`, { headers: { cookie }, cache: "no-store" }),
+      ]);
+
+      const [studentsData, coursesData, missionsData, assignmentsData] = await Promise.all([
+        studentsRes.ok ? studentsRes.json() : Promise.resolve({ total: 0 }),
+        coursesRes.ok ? coursesRes.json() : Promise.resolve({ total: 0 }),
+        missionsRes.ok ? missionsRes.json() : Promise.resolve({ total: 0, missions: [] }),
+        assignmentsRes.ok ? assignmentsRes.json() : Promise.resolve({ total: 0, assignments: [] }),
+      ]);
+
+      const totalStudents =
+        typeof studentsData?.pagination?.total === 'number'
+          ? studentsData.pagination.total
+          : typeof studentsData?.total === 'number'
+            ? studentsData.total
+            : Array.isArray(studentsData?.data)
+              ? studentsData.data.length
+              : 0;
+
+      const totalCourses =
+        typeof coursesData?.pagination?.total === 'number'
+          ? coursesData.pagination.total
+          : typeof coursesData?.total === 'number'
+            ? coursesData.total
+            : Array.isArray(coursesData?.data)
+              ? coursesData.data.length
+              : 0;
+
+      const missionsArray = Array.isArray(missionsData?.data) ? missionsData.data : [];
+      const activeMissions = typeof missionsData?.pagination?.total === 'number'
+        ? missionsData.pagination.total
+        : missionsArray.filter((m: any) => m.status === 'active').length;
+      const avgProgress = 67; // Placeholder until a progress API is available
+
+      return { totalStudents, totalCourses, activeMissions, avgProgress };
+    } catch {
+      return { totalStudents: 0, totalCourses: 0, activeMissions: 0, avgProgress: 0 };
+    }
+  }
+
+  const { totalStudents, totalCourses, activeMissions, avgProgress } = await getStats();
+
   const isAdminOrManager = user.role === "admin" || user.role === "manager" || user.role === "developer";
   const isSreOrElevated = user.role === "sre" || user.role === "developer" || user.role === "admin" || user.role === "manager";
 
@@ -57,11 +107,11 @@ export default async function DashboardPage() {
         <div className="bg-white rounded-lg shadow p-6">
           <div className="flex items-center">
             <div className="flex-shrink-0">
-              <Users className="h-8 w-8 text-blue-600" />
+              <Users className="h-8 w-8 text-gray-600" />
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-500">Total Students</p>
-              <p className="text-2xl font-bold text-gray-900">156</p>
+              <p className="text-2xl font-bold text-gray-900">{totalStudents}</p>
             </div>
           </div>
         </div>
@@ -69,11 +119,11 @@ export default async function DashboardPage() {
         <div className="bg-white rounded-lg shadow p-6">
           <div className="flex items-center">
             <div className="flex-shrink-0">
-              <BookOpen className="h-8 w-8 text-green-600" />
+              <BookOpen className="h-8 w-8 text-gray-600" />
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-500">Active Courses</p>
-              <p className="text-2xl font-bold text-gray-900">24</p>
+              <p className="text-2xl font-bold text-gray-900">{totalCourses}</p>
             </div>
           </div>
         </div>
@@ -81,11 +131,11 @@ export default async function DashboardPage() {
         <div className="bg-white rounded-lg shadow p-6">
           <div className="flex items-center">
             <div className="flex-shrink-0">
-              <Target className="h-8 w-8 text-purple-600" />
+              <Target className="h-8 w-8 text-gray-600" />
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-500">Active Missions</p>
-              <p className="text-2xl font-bold text-gray-900">12</p>
+              <p className="text-2xl font-bold text-gray-900">{activeMissions}</p>
             </div>
           </div>
         </div>
@@ -93,11 +143,11 @@ export default async function DashboardPage() {
         <div className="bg-white rounded-lg shadow p-6">
           <div className="flex items-center">
             <div className="flex-shrink-0">
-              <BarChart3 className="h-8 w-8 text-orange-600" />
+              <BarChart3 className="h-8 w-8 text-gray-600" />
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-500">Avg Progress</p>
-              <p className="text-2xl font-bold text-gray-900">67%</p>
+              <p className="text-2xl font-bold text-gray-900">{avgProgress}%</p>
             </div>
           </div>
         </div>
@@ -112,7 +162,7 @@ export default async function DashboardPage() {
               href="/dashboard/admin/students"
               className="flex items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
             >
-              <Users className="h-6 w-6 text-blue-600 mr-3" />
+              <Users className="h-6 w-6 text-gray-600 mr-3" />
               <div>
                 <h3 className="font-medium text-gray-900">View Students</h3>
                 <p className="text-sm text-gray-500">View and manage enrolled students</p>
@@ -124,7 +174,7 @@ export default async function DashboardPage() {
               href="/dashboard/admin/missions"
               className="flex items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
             >
-              <Target className="h-6 w-6 text-purple-600 mr-3" />
+              <Target className="h-6 w-6 text-gray-600 mr-3" />
               <div>
                 <h3 className="font-medium text-gray-900">Mission Management</h3>
                 <p className="text-sm text-gray-500">Create and manage learning missions</p>
@@ -136,7 +186,7 @@ export default async function DashboardPage() {
               href="/dashboard/admin/courses"
               className="flex items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
             >
-              <BookOpen className="h-6 w-6 text-green-600 mr-3" />
+              <BookOpen className="h-6 w-6 text-gray-600 mr-3" />
               <div>
                 <h3 className="font-medium text-gray-900">Course Management</h3>
                 <p className="text-sm text-gray-500">Manage course offerings and assignments</p>
@@ -148,24 +198,33 @@ export default async function DashboardPage() {
       )}
 
       {/* Mission Hub Access */}
-      {isSreOrElevated && (
-        <div className="bg-gradient-to-r from-purple-600 to-blue-600 rounded-lg shadow p-6 text-white">
+      {isAdminOrManager && (
+        <div className="bg-white rounded-lg shadow p-6 border border-gray-200">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-xl font-bold mb-2">Mission Hub</h2>
-              <p className="text-purple-100 mb-4">
+              <h2 className="text-xl font-bold text-gray-900 mb-2">Mission Hub</h2>
+              <p className="text-gray-600 mb-4">
                 Access advanced mission analytics, progress tracking, and performance insights
               </p>
-              <Link
-                href="/mission-hub"
-                className="inline-flex items-center px-4 py-2 bg-white text-purple-600 rounded-md font-medium hover:bg-gray-100 transition-colors"
-              >
-                <Target className="h-4 w-4 mr-2" />
-                Go to Mission Hub
-              </Link>
+              <div className="flex flex-wrap gap-3">
+                <Link
+                  href="/mission-hub"
+                  className="inline-flex items-center px-4 py-2 border border-gray-300 text-gray-900 rounded-md font-medium hover:bg-gray-50 transition-colors"
+                >
+                  <Target className="h-4 w-4 mr-2 text-gray-600" />
+                  Go to Mission Hub
+                </Link>
+                <Link
+                  href="/dashboard/admin/missions"
+                  className="inline-flex items-center px-4 py-2 border border-gray-300 text-gray-900 rounded-md font-medium hover:bg-gray-50 transition-colors"
+                >
+                  <Target className="h-4 w-4 mr-2 text-gray-600" />
+                  Mission Management
+                </Link>
+              </div>
             </div>
             <div className="hidden md:block">
-              <Target className="h-24 w-24 text-purple-200 opacity-50" />
+              <Target className="h-24 w-24 text-gray-200" />
             </div>
           </div>
         </div>
@@ -176,21 +235,21 @@ export default async function DashboardPage() {
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Recent Activity</h2>
         <div className="space-y-4">
           <div className="flex items-center p-3 bg-gray-50 rounded-lg">
-            <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
+            <div className="w-2 h-2 bg-gray-500 rounded-full mr-3"></div>
             <div className="flex-1">
               <p className="text-sm text-gray-900">New student enrolled in Batch 007</p>
               <p className="text-xs text-gray-500">2 hours ago</p>
             </div>
           </div>
           <div className="flex items-center p-3 bg-gray-50 rounded-lg">
-            <div className="w-2 h-2 bg-blue-500 rounded-full mr-3"></div>
+            <div className="w-2 h-2 bg-gray-500 rounded-full mr-3"></div>
             <div className="flex-1">
               <p className="text-sm text-gray-900">Mission "Web Development Fundamentals" completed</p>
               <p className="text-xs text-gray-500">4 hours ago</p>
             </div>
           </div>
           <div className="flex items-center p-3 bg-gray-50 rounded-lg">
-            <div className="w-2 h-2 bg-yellow-500 rounded-full mr-3"></div>
+            <div className="w-2 h-2 bg-gray-500 rounded-full mr-3"></div>
             <div className="flex-1">
               <p className="text-sm text-gray-900">New assignment posted for Course CS101</p>
               <p className="text-xs text-gray-500">6 hours ago</p>

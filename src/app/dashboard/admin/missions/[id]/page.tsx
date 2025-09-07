@@ -59,7 +59,7 @@ export default function MissionDetailPage() {
   const fetchMission = async (missionId: string) => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/missions/${missionId}`);
+      const response = await fetch(`/api/admin/missions/${missionId}`);
       
       if (response.ok) {
         const data = await response.json();

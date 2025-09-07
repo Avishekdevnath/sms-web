@@ -22,6 +22,11 @@ export interface IUser {
   profileCompleted?: boolean;
   invitedAt?: Date;
   
+  // Mentor assignment fields
+  mentorId?: Types.ObjectId;
+  studentsCount?: number;
+  maxStudents?: number;
+  
   // Ban and invitation fields
   bannedAt?: Date;
   banReason?: string;
@@ -47,13 +52,18 @@ const UserSchema = new Schema<IUser>(
     deletedAt: { type: Date },
     deletedBy: { type: Schema.Types.ObjectId, ref: "User" },
     
-    // Student profile fields
+    // Profile fields (available for all roles)
     studentId: { type: String },
     username: { type: String },
     phone: { type: String },
     profilePicture: { type: String },
     profileCompleted: { type: Boolean, default: false },
     invitedAt: { type: Date },
+    
+    // Mentor assignment fields
+    mentorId: { type: Schema.Types.ObjectId, ref: "User" },
+    studentsCount: { type: Number, default: 0 },
+    maxStudents: { type: Number },
     
     // Ban and invitation fields
     bannedAt: { type: Date },
@@ -70,7 +80,6 @@ const UserSchema = new Schema<IUser>(
 // Indexes for efficient querying
 UserSchema.index({ userId: 1 }, { unique: true, sparse: true });
 UserSchema.index({ email: 1 }, { unique: true });
-UserSchema.index({ username: 1 }, { unique: true, sparse: true });
 UserSchema.index({ role: 1 });
 UserSchema.index({ isActive: 1 });
 UserSchema.index({ mustChangePassword: 1 });
@@ -82,5 +91,8 @@ UserSchema.index({ bannedAt: 1 });
 UserSchema.index({ inviteToken: 1 });
 UserSchema.index({ inviteExpiresAt: 1 });
 UserSchema.index({ passwordExpiresAt: 1 });
+UserSchema.index({ mentorId: 1 }); // For finding students by mentor
+UserSchema.index({ studentsCount: 1 }); // For mentor capacity queries
+UserSchema.index({ maxStudents: 1 }); // For mentor capacity queries
 
 export const User = models.User || model<IUser>("User", UserSchema); 

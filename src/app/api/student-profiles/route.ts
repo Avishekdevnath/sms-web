@@ -49,11 +49,20 @@ export async function GET(req: NextRequest) {
       .limit(limit)
       .lean();
 
+    console.log('📊 Found profiles:', profiles.length);
+    console.log('🔍 Profile sample:', profiles[0] ? { 
+      hasUserId: !!profiles[0].userId, 
+      userIdType: typeof profiles[0].userId,
+      userIdId: profiles[0].userId?._id 
+    } : 'No profiles');
+
     // Get total count
     const total = await StudentProfile.countDocuments(searchQuery);
 
     // Fetch batch memberships for all profiles
-    const userIds = profiles.map(profile => profile.userId._id);
+    const userIds = profiles
+      .filter(profile => profile.userId && profile.userId._id)
+      .map(profile => profile.userId._id);
     const memberships = await StudentBatchMembership.find({
       studentId: { $in: userIds }
     }).populate('batchId', 'title code').lean();
@@ -64,9 +73,11 @@ export async function GET(req: NextRequest) {
     }).populate('batchId', 'title code').lean();
 
     // Enhance profiles with additional data
-    const enhancedProfiles = profiles.map(profile => {
-      const userMemberships = memberships.filter(m => m.studentId.toString() === profile.userId._id.toString());
-      const userEnrollments = enrollments.filter(e => e.userId.toString() === profile.userId._id.toString());
+    const enhancedProfiles = profiles
+      .filter(profile => profile.userId && profile.userId._id)
+      .map(profile => {
+        const userMemberships = memberships.filter(m => m.studentId.toString() === profile.userId._id.toString());
+        const userEnrollments = enrollments.filter(e => e.userId.toString() === profile.userId._id.toString());
       
       const batches = userMemberships.map(m => ({
         id: m.batchId._id,

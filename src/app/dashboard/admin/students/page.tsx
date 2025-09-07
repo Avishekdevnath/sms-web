@@ -101,7 +101,7 @@ export default function StudentsPage() {
       });
 
       if (response.ok) {
-        setProfiles(profiles.filter(profile => profile._id !== profileId));
+        setProfiles(profiles?.filter(profile => profile._id !== profileId) || []);
         setTotalStudents(prev => prev - 1);
         } else {
         const error = await response.json();
@@ -158,12 +158,23 @@ export default function StudentsPage() {
     return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
   };
 
-  if (loading && profiles.length === 0) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-black mx-auto"></div>
           <p className="mt-4 text-gray-600">Loading students...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!profiles) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-black mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading student profiles...</p>
         </div>
       </div>
     );
@@ -212,7 +223,7 @@ export default function StudentsPage() {
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-500">Active Students</p>
               <p className="text-2xl font-bold text-black">
-                {profiles.filter(p => p.isActive && p.profileCompleted).length}
+                {profiles?.filter(p => p.isActive && p.profileCompleted)?.length || 0}
               </p>
             </div>
             </div>
@@ -226,7 +237,7 @@ export default function StudentsPage() {
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-500">Profile Pending</p>
               <p className="text-2xl font-bold text-black">
-                {profiles.filter(p => !p.profileCompleted).length}
+                {profiles?.filter(p => !p.profileCompleted)?.length || 0}
               </p>
             </div>
           </div>
@@ -240,7 +251,7 @@ export default function StudentsPage() {
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-500">Enrolled in Batches</p>
               <p className="text-2xl font-bold text-black">
-                {profiles.filter(p => p.batches.length > 0).length}
+                {profiles?.filter(p => p.batches.length > 0)?.length || 0}
               </p>
             </div>
             </div>
@@ -317,7 +328,7 @@ export default function StudentsPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-              {profiles.map((profile) => (
+              {profiles?.map((profile) => (
                 <tr key={profile._id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center">
@@ -392,7 +403,7 @@ export default function StudentsPage() {
             </div>
 
         {/* Empty State */}
-        {profiles.length === 0 && !loading && (
+                    {(!profiles || profiles.length === 0) && !loading && (
           <div className="text-center py-12">
             <User className="mx-auto h-12 w-12 text-gray-400" />
             <h3 className="mt-2 text-sm font-medium text-gray-900">No students found</h3>

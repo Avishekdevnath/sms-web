@@ -677,7 +677,7 @@ class EmailService {
 
   // Alias for backward compatibility
   async sendStudentInvitation(email: string, temporaryPassword: string, name: string): Promise<string> {
-    const profileUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/profile-complete`;
+    const profileUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/invitation`;
     return this.studentInvitation(email, name, temporaryPassword, profileUrl);
   }
 }

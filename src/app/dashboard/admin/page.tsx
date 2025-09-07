@@ -37,7 +37,7 @@ export default function AdminDashboard() {
       const [studentsRes, coursesRes, missionsRes, batchesRes, assignmentsRes] = await Promise.all([
         fetch('/api/students?limit=1'),
         fetch('/api/courses?limit=1'),
-        fetch('/api/missions?limit=1'),
+        fetch('/api/v2/missions?status=active&limit=1'),
         fetch('/api/batches?limit=1'),
         fetch('/api/assignments?limit=1')
       ]);
@@ -48,14 +48,32 @@ export default function AdminDashboard() {
       const batchesData = await batchesRes.json();
       const assignmentsData = await assignmentsRes.json();
 
+      const totalStudents = typeof studentsData?.pagination?.total === 'number'
+        ? studentsData.pagination.total
+        : (studentsData?.total || (Array.isArray(studentsData?.data) ? studentsData.data.length : 0));
+
+      const totalCourses = typeof coursesData?.total === 'number'
+        ? coursesData.total
+        : (Array.isArray(coursesData?.courses) ? coursesData.courses.length : 0);
+
+      const activeMissions = typeof missionsData?.pagination?.total === 'number'
+        ? missionsData.pagination.total
+        : (Array.isArray(missionsData?.data) ? missionsData.data.filter((m: any) => m.status === 'active').length : 0);
+
+      const totalBatches = batchesData?.total || 0;
+      const totalAssignments = assignmentsData?.total || 0;
+      const pendingAssignments = Array.isArray(assignmentsData?.assignments)
+        ? assignmentsData.assignments.filter((a: any) => !a.submitted && !a.publishedAt).length
+        : 0;
+
       setStats({
-        totalStudents: studentsData.total || 0,
-        totalCourses: coursesData.total || 0,
-        totalMissions: missionsData.total || 0,
-        activeMissions: missionsData.missions?.filter((m: any) => m.status === 'active').length || 0,
-        totalBatches: batchesData.total || 0,
-        totalAssignments: assignmentsData.total || 0,
-        pendingAssignments: assignmentsData.assignments?.filter((a: any) => !a.submitted).length || 0
+        totalStudents,
+        totalCourses,
+        totalMissions: activeMissions, // not shown; keep for completeness
+        activeMissions,
+        totalBatches,
+        totalAssignments,
+        pendingAssignments
       });
 
     } catch (error) {
@@ -85,6 +103,11 @@ export default function AdminDashboard() {
       name: "Manage Courses",
       description: "Create and manage academic courses",
       href: "/dashboard/admin/courses",
+    },
+    {
+      name: "Seed Demo Data",
+      description: "Populate database with demo data for testing",
+      href: "/seed-demo-data",
     }
   ];
 

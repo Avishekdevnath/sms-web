@@ -2,12 +2,19 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { User } from "@/models/User";
 import { StudentBatchMembership } from "@/models/StudentBatchMembership";
+import { getAuthUserFromRequest } from "@/lib/rbac";
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // Check authentication
+    const me = await getAuthUserFromRequest(req);
+    if (!me) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     await connectToDatabase();
     
     const { id } = await params;

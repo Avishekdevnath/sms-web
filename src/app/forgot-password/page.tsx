@@ -6,7 +6,8 @@ import Link from 'next/link';
 
 export default function ForgotPasswordPage() {
   const router = useRouter();
-  const [email, setEmail] = useState('');
+  const [loginIdentifier, setLoginIdentifier] = useState('');
+  const [loginMethod, setLoginMethod] = useState<'email' | 'username' | 'phone'>('email');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -16,8 +17,8 @@ export default function ForgotPasswordPage() {
     setError('');
     setSuccess('');
 
-    if (!email.trim()) {
-      setError('Please enter your email address');
+    if (!loginIdentifier.trim()) {
+      setError('Please enter your login identifier');
       return;
     }
 
@@ -29,7 +30,10 @@ export default function ForgotPasswordPage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ email: email.trim() }),
+        body: JSON.stringify({ 
+          loginIdentifier: loginIdentifier.trim(),
+          loginMethod 
+        }),
       });
 
       const data = await response.json();
@@ -39,7 +43,7 @@ export default function ForgotPasswordPage() {
       }
 
       setSuccess(data.message || 'Password reset email sent successfully!');
-      setEmail('');
+      setLoginIdentifier('');
 
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
@@ -56,7 +60,7 @@ export default function ForgotPasswordPage() {
             Forgot Your Password?
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
-            Enter your email address and we'll send you a temporary password to reset your account.
+            Enter your login information and we'll send you a temporary password to reset your account.
           </p>
         </div>
 
@@ -75,19 +79,40 @@ export default function ForgotPasswordPage() {
 
           <form className="space-y-6" onSubmit={handleSubmit}>
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-                Email Address
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Login Method
               </label>
+              <div className="flex space-x-2 mb-2">
+                {[
+                  { value: "email", label: "Email", placeholder: "Enter your email" },
+                  { value: "username", label: "Username", placeholder: "Enter your username" },
+                  { value: "phone", label: "Phone", placeholder: "Enter your phone number" }
+                ].map((method) => (
+                  <button
+                    key={method.value}
+                    type="button"
+                    onClick={() => setLoginMethod(method.value as "email" | "username" | "phone")}
+                    className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                      loginMethod === method.value
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                  >
+                    {method.label}
+                  </button>
+                ))}
+              </div>
               <input
-                id="email"
-                name="email"
-                type="email"
-                autoComplete="email"
+                type={loginMethod === "email" ? "email" : "text"}
                 required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                value={loginIdentifier}
+                onChange={(e) => setLoginIdentifier(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Enter your email address"
+                placeholder={
+                  loginMethod === "email" ? "Enter your email" :
+                  loginMethod === "username" ? "Enter your username" :
+                  "Enter your phone number"
+                }
               />
             </div>
 

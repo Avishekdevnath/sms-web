@@ -76,7 +76,6 @@ const InvitationSchema = new Schema<IInvitation>(
 
 // Indexes for efficient querying
 InvitationSchema.index({ email: 1 });
-InvitationSchema.index({ invitationToken: 1 }, { unique: true });
 InvitationSchema.index({ status: 1 });
 InvitationSchema.index({ invitationExpiresAt: 1 });
 InvitationSchema.index({ invitedBy: 1 });

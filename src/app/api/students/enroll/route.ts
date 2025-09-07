@@ -8,7 +8,21 @@ import { validateEmail, sanitizeInput } from "@/lib/studentIdGenerator";
 export async function POST(req: NextRequest) {
   try {
     await connectToDatabase();
-    const me = await getAuthUserFromRequest(req);
+    
+    // Get authenticated user
+    let me;
+    try {
+      me = await getAuthUserFromRequest(req);
+    } catch (authError) {
+      console.log('Enrollment API - Authentication error:', authError);
+      return Response.json({
+        error: {
+          code: "UNAUTHORIZED",
+          message: "Authentication required"
+        }
+      }, { status: 401 });
+    }
+    
     if (!me) {
       return Response.json({
         error: {
@@ -17,12 +31,26 @@ export async function POST(req: NextRequest) {
         }
       }, { status: 401 });
     }
-    requireRoles(me, ["admin", "developer", "manager"]);
+    
+    // Check user roles
+    try {
+      requireRoles(me, ["admin", "developer", "manager"]);
+    } catch (roleError) {
+      console.log('Enrollment API - Role check failed:', roleError);
+      return Response.json({
+        error: {
+          code: "FORBIDDEN",
+          message: "Insufficient permissions"
+        }
+      }, { status: 403 });
+    }
 
     const body = await req.json();
+    console.log('Enrollment API - Request body:', body);
     const { emails, batchId } = body;
 
     if (!emails || !Array.isArray(emails) || emails.length === 0) {
+      console.log('Enrollment API - Validation error: emails array is required');
       return Response.json({
         error: {
           code: "VALIDATION_ERROR",
@@ -32,6 +60,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (!batchId) {
+      console.log('Enrollment API - Validation error: batchId is required');
       return Response.json({
         error: {
           code: "VALIDATION_ERROR",
@@ -48,12 +77,17 @@ export async function POST(req: NextRequest) {
       enrollments: [] as any[]
     };
 
+    console.log('Enrollment API - Processing emails:', emails);
+    console.log('Enrollment API - Batch ID:', batchId);
+    
     for (const emailData of emails) {
       try {
         const email = emailData.email || emailData;
+        console.log('Enrollment API - Processing email:', email);
         
         // Validate email
         if (!validateEmail(email)) {
+          console.log('Enrollment API - Invalid email format:', email);
           results.failed++;
           results.errors.push({ email, reason: "Invalid email format" });
           continue;
@@ -66,6 +100,7 @@ export async function POST(req: NextRequest) {
         }).lean();
 
         if (existingEnrollment) {
+          console.log('Enrollment API - Already enrolled:', email);
           results.failed++;
           results.errors.push({ email, reason: "Already enrolled in this batch" });
           continue;
@@ -78,12 +113,14 @@ export async function POST(req: NextRequest) {
         }).lean();
 
         if (existingUser) {
+          console.log('Enrollment API - User already exists:', email);
           results.failed++;
           results.errors.push({ email, reason: "User already exists as student" });
           continue;
         }
 
         // Create enrollment
+        console.log('Enrollment API - Creating enrollment for:', email);
         const enrollment = new StudentEnrollment({
           batchId,
           email: email.toLowerCase(),
@@ -94,6 +131,7 @@ export async function POST(req: NextRequest) {
         });
 
         await enrollment.save();
+        console.log('Enrollment API - Enrollment created successfully for:', email);
         
         results.successful++;
         results.enrollments.push({
@@ -103,7 +141,7 @@ export async function POST(req: NextRequest) {
         });
 
       } catch (error) {
-        console.error(`Error enrolling ${emailData.email || emailData}:`, error);
+        console.error(`Enrollment API - Error enrolling ${emailData.email || emailData}:`, error);
         results.failed++;
         results.errors.push({ 
           email: emailData.email || emailData, 
@@ -112,6 +150,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    console.log('Enrollment API - Final results:', results);
     return Response.json({
       success: true,
       message: `Enrollment completed. ${results.successful} successful, ${results.failed} failed.`,
@@ -132,8 +171,42 @@ export async function POST(req: NextRequest) {
 export async function GET(req: NextRequest) {
   try {
     await connectToDatabase();
-    const me = await getAuthUserFromRequest(req);
-    requireRoles(me, ["admin", "developer", "manager"]);
+    
+    // Get authenticated user
+    let me;
+    try {
+      me = await getAuthUserFromRequest(req);
+    } catch (authError) {
+      console.log('Enrollment API GET - Authentication error:', authError);
+      return Response.json({
+        error: {
+          code: "UNAUTHORIZED",
+          message: "Authentication required"
+        }
+      }, { status: 401 });
+    }
+    
+    if (!me) {
+      return Response.json({
+        error: {
+          code: "UNAUTHORIZED",
+          message: "Authentication required"
+        }
+      }, { status: 401 });
+    }
+    
+    // Check user roles
+    try {
+      requireRoles(me, ["admin", "developer", "manager"]);
+    } catch (roleError) {
+      console.log('Enrollment API GET - Role check failed:', roleError);
+      return Response.json({
+        error: {
+          code: "FORBIDDEN",
+          message: "Insufficient permissions"
+        }
+      }, { status: 403 });
+    }
 
     const { searchParams } = new URL(req.url);
     const page = parseInt(searchParams.get("page") || "1");

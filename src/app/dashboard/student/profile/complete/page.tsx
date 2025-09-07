@@ -198,6 +198,7 @@ export default function StudentProfileCompletePage() {
       if (response.ok) {
         setSuccess(true);
         setTimeout(() => {
+          // Redirect to the main student dashboard
           router.push('/dashboard/student');
         }, 2000);
       } else {

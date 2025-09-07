@@ -41,7 +41,7 @@ const StudentProfileSchema = new Schema<IStudentProfile>(
     lastName: { type: String, required: true, trim: true },
     username: { type: String, required: true, unique: true, trim: true },
     phone: { type: String, required: true, trim: true },
-    profilePicture: { type: String, default: '/placeholder-avatar.png' },
+    profilePicture: { type: String }, // Remove default value to make it truly optional
     bio: { type: String, maxlength: 500 },
     dateOfBirth: { type: Date },
     address: { type: String, maxlength: 200 },

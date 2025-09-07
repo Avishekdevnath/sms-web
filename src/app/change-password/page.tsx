@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
+import PasswordInput from '@/components/shared/PasswordInput';
 
 interface ChangePasswordFormData {
   currentPassword: string;
@@ -90,7 +91,8 @@ export default function ChangePasswordPage() {
         confirmPassword: ''
       });
 
-      // Logout after a delay to allow user to see success message
+      // Always logout after password change to ensure fresh authentication
+      // Students will need to log in again with their new password
       setTimeout(() => {
         logout();
         router.push('/login');
@@ -144,9 +146,7 @@ export default function ChangePasswordPage() {
               <label htmlFor="currentPassword" className="block text-sm font-medium text-gray-700 mb-1">
                 Current Password *
               </label>
-              <input
-                type="password"
-                id="currentPassword"
+              <PasswordInput
                 name="currentPassword"
                 value={formData.currentPassword}
                 onChange={handleInputChange}
@@ -160,9 +160,7 @@ export default function ChangePasswordPage() {
               <label htmlFor="newPassword" className="block text-sm font-medium text-gray-700 mb-1">
                 New Password *
               </label>
-              <input
-                type="password"
-                id="newPassword"
+              <PasswordInput
                 name="newPassword"
                 value={formData.newPassword}
                 onChange={handleInputChange}
@@ -176,9 +174,7 @@ export default function ChangePasswordPage() {
               <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">
                 Confirm New Password *
               </label>
-              <input
-                type="password"
-                id="confirmPassword"
+              <PasswordInput
                 name="confirmPassword"
                 value={formData.confirmPassword}
                 onChange={handleInputChange}

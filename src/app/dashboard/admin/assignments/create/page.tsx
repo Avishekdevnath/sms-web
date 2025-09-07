@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Save, Loader2, Plus, X } from "lucide-react";
+import EnhancedCourseOfferingSelector from "@/components/assignments/EnhancedCourseOfferingSelector";
 
 interface CourseOffering {
   _id: string;
@@ -53,7 +54,7 @@ export default function CreateAssignmentPage() {
     try {
       const response = await fetch("/api/course-offerings?limit=100");
       const data = await response.json();
-      setCourseOfferings(data.courseOfferings || []);
+      setCourseOfferings(data.data || []);
     } catch (error) {
       console.error("Error fetching course offerings:", error);
     }
@@ -138,12 +139,23 @@ export default function CreateAssignmentPage() {
     try {
       setLoading(true);
       
+      // Prepare data for submission
+      const submissionData = {
+        ...formData,
+        // Convert datetime-local to ISO string if dueAt is provided
+        dueAt: formData.dueAt ? new Date(formData.dueAt).toISOString() : undefined,
+        // Remove empty strings and convert to proper types
+        description: formData.description || undefined,
+        maxPoints: formData.maxPoints || undefined,
+        attachments: formData.attachments.length > 0 ? formData.attachments : undefined,
+      };
+      
       const response = await fetch("/api/assignments", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(submissionData),
       });
 
       if (response.ok) {
@@ -188,27 +200,21 @@ export default function CreateAssignmentPage() {
             <label htmlFor="courseOfferingId" className="block text-sm font-medium text-gray-700 mb-2">
               Course Offering *
             </label>
-            <select
-              id="courseOfferingId"
-              name="courseOfferingId"
+            <EnhancedCourseOfferingSelector
               value={formData.courseOfferingId}
-              onChange={handleInputChange}
-              className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-1 ${
-                errors.courseOfferingId 
-                  ? "border-red-500 focus:ring-red-500" 
-                  : "border-gray-300 focus:ring-black"
-              }`}
-            >
-              <option value="">Select a course offering</option>
-              {courseOfferings.map((offering) => (
-                <option key={offering._id} value={offering._id}>
-                  {offering.courseId.title} - {offering.title} ({offering.code})
-                </option>
-              ))}
-            </select>
-            {errors.courseOfferingId && (
-              <p className="mt-1 text-sm text-red-600">{errors.courseOfferingId}</p>
-            )}
+              onChange={(value) => {
+                setFormData(prev => ({ ...prev, courseOfferingId: value }));
+                if (errors.courseOfferingId) {
+                  setErrors(prev => ({ ...prev, courseOfferingId: "" }));
+                }
+              }}
+              error={errors.courseOfferingId}
+              placeholder="Select a course offering"
+              showSearch={true}
+              showFilters={true}
+              groupBy="batch"
+              limit={200}
+            />
           </div>
 
           {/* Assignment Title */}

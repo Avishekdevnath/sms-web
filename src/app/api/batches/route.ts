@@ -29,6 +29,10 @@ export async function GET(req: NextRequest) {
       Batch.countDocuments(filter)
     ]);
     
+    console.log('Batches API - Found batches:', batches.length);
+    console.log('Batches API - Total count:', total);
+    console.log('Batches API - Sample batch:', batches[0]);
+    
     return NextResponse.json({
       batches,
       total,

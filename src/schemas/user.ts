@@ -7,13 +7,13 @@ export const UserCreateSchema = z.object({
     required_error: "Role is required",
     invalid_type_error: "Role must be one of: admin, developer, manager, sre, mentor, student"
   }),
-  password: z.string().min(8, "Password must be at least 8 characters").optional(),
+  password: z.string().min(6, "Password must be at least 6 characters").optional(),
   batchId: z.string().optional(),
   isActive: z.boolean().default(true),
 });
 
 export const UserUpdateSchema = UserCreateSchema.partial().omit({ password: true }).extend({
-  password: z.string().min(8, "Password must be at least 8 characters").optional(),
+  password: z.string().min(6, "Password must be at least 6 characters").optional(),
 });
 
 export const UserQuerySchema = z.object({
@@ -38,7 +38,7 @@ export const UserBulkCreateSchema = z.object({
 
 export const UserPasswordChangeSchema = z.object({
   currentPassword: z.string().min(1, "Current password is required"),
-  newPassword: z.string().min(8, "New password must be at least 8 characters"),
+  newPassword: z.string().min(6, "New password must be at least 6 characters"),
   confirmPassword: z.string().min(1, "Password confirmation is required"),
 }).refine((data) => data.newPassword === data.confirmPassword, {
   message: "Passwords do not match",

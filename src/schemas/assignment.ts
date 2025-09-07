@@ -4,7 +4,15 @@ export const AssignmentCreateSchema = z.object({
   courseOfferingId: z.string().min(1, "Course offering is required"),
   title: z.string().min(1, "Title is required").max(200, "Title must be less than 200 characters"),
   description: z.string().optional(),
-  dueAt: z.string().datetime("Invalid due date").optional(),
+  dueAt: z.string().optional().refine((val) => {
+    if (!val) return true; // Allow empty/undefined
+    try {
+      new Date(val).toISOString();
+      return true;
+    } catch {
+      return false;
+    }
+  }, "Invalid due date"),
   maxPoints: z.number().min(0, "Max points must be at least 0").max(1000, "Max points must be at most 1000").optional(),
   attachments: z.array(z.object({
     name: z.string().min(1, "Attachment name is required"),

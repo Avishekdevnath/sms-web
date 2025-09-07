@@ -13,11 +13,19 @@ const profileSchema = z.object({
   firstName: z.string().min(1, "First name is required").max(50),
   lastName: z.string().min(1, "Last name is required").max(50),
   username: z.string().min(3, "Username must be at least 3 characters").max(30),
-  phoneNumber: z.string().min(1, "Phone number is required"),
+  phone: z.string().min(1, "Phone number is required"),
+  profilePicture: z.string().optional(), // Make profile picture truly optional
   courseGoal: z.string().min(1, "Course goal is required").max(500),
-  newPassword: z.string().min(6, "Password must be at least 6 characters"),
-  confirmPassword: z.string().min(1, "Please confirm your password")
-}).refine((data) => data.newPassword === data.confirmPassword, {
+  // Password fields are now optional in profile completion
+  newPassword: z.string().min(6, "Password must be at least 6 characters").optional(),
+  confirmPassword: z.string().optional()
+}).refine((data) => {
+  // If either password field is provided, both must be provided and match
+  if (data.newPassword || data.confirmPassword) {
+    return !!data.newPassword && !!data.confirmPassword && data.newPassword === data.confirmPassword;
+  }
+  return true;
+}, {
   message: "Passwords do not match",
   path: ["confirmPassword"]
 });
@@ -63,20 +71,24 @@ export async function POST(req: NextRequest) {
       }, { status: 400 });
     }
 
-    // Hash the new password
-    const hashedPassword = await bcrypt.hash(validatedData.newPassword, 10);
+    // Prepare updates; only update password if provided here (not recommended in this flow)
+    const updateFields: any = {
+      name: `${validatedData.firstName} ${validatedData.lastName}`,
+      username: validatedData.username,
+      profileCompleted: true,
+      passwordExpiresAt: null,
+      isActive: true
+    };
+
+    if (validatedData.newPassword) {
+      const hashedPassword = await bcrypt.hash(validatedData.newPassword, 10);
+      updateFields.password = hashedPassword;
+    }
 
     // Update user with new information
     const updatedUser = await User.findByIdAndUpdate(
       user._id,
-      {
-        name: `${validatedData.firstName} ${validatedData.lastName}`,
-        username: validatedData.username,
-        password: hashedPassword,
-        profileCompleted: true,
-        passwordExpiresAt: null, // Remove password expiry since it's now permanent
-        isActive: true
-      },
+      updateFields,
       { new: true }
     );
 
@@ -97,7 +109,8 @@ export async function POST(req: NextRequest) {
       firstName: validatedData.firstName,
       lastName: validatedData.lastName,
       username: validatedData.username,
-      phone: validatedData.phoneNumber,
+      phone: validatedData.phone,
+      profilePicture: validatedData.profilePicture || null, // Set to null if not provided
       academicInfo: {
         courseGoal: validatedData.courseGoal
       },

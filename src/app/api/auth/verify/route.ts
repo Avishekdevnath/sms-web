@@ -1,5 +1,7 @@
 import { NextRequest } from "next/server";
 import { verifyUserToken } from "@/lib/auth";
+import { connectToDatabase } from "@/lib/mongodb";
+import { User } from "@/models/User";
 
 export async function GET(req: NextRequest) {
   try {
@@ -18,19 +20,28 @@ export async function GET(req: NextRequest) {
 
     try {
       // Verify the token
-      const user = verifyUserToken(token);
+      const tokenUser = verifyUserToken(token);
       
-      if (!user || !user._id || !user.role) {
+      if (!tokenUser || !tokenUser._id || !tokenUser.role) {
         throw new Error('Invalid token structure');
       }
 
-      // Return user data
+      // Connect to database and get complete user data
+      await connectToDatabase();
+      const user = await User.findById(tokenUser._id).select('_id email role name profileCompleted').lean();
+      
+      if (!user) {
+        throw new Error('User not found in database');
+      }
+
+      // Return complete user data
       return Response.json({ 
         user: { 
           _id: user._id, 
           email: user.email, 
           role: user.role, 
-          name: user.name 
+          name: user.name,
+          profileCompleted: user.profileCompleted
         } 
       });
     } catch (tokenError) {

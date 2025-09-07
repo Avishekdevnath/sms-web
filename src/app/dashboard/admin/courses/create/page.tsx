@@ -3,26 +3,53 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Save, Loader2, RefreshCw } from "lucide-react";
+import { ArrowLeft, Save, Loader2 } from "lucide-react";
+
+interface Semester {
+  _id: string;
+  number: number;
+  title: string;
+  batchId: {
+    _id: string;
+    code: string;
+    title: string;
+  };
+}
 
 interface CourseFormData {
   title: string;
-  code: string;
   description: string;
+  semesterId?: string; // Make semesterId optional
 }
 
 export default function CreateCoursePage() {
   const router = useRouter();
   const [formData, setFormData] = useState<CourseFormData>({
     title: "",
-    code: "",
     description: "",
+    semesterId: "", // Keep as empty string for optional selection
   });
+  const [semesters, setSemesters] = useState<Semester[]>([]);
   const [loading, setLoading] = useState(false);
-  const [generatingCode, setGeneratingCode] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  useEffect(() => {
+    fetchSemesters();
+  }, []);
+
+  const fetchSemesters = async () => {
+    try {
+      const response = await fetch('/api/semesters');
+      if (response.ok) {
+        const data = await response.json();
+        setSemesters(data.data || []);
+      }
+    } catch (error) {
+      console.error('Error fetching semesters:', error);
+    }
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     
     setFormData(prev => ({
@@ -39,27 +66,6 @@ export default function CreateCoursePage() {
     }
   };
 
-  const generateCourseCode = async () => {
-    try {
-      setGeneratingCode(true);
-      const response = await fetch("/api/courses/generate-code");
-      if (response.ok) {
-        const data = await response.json();
-        setFormData(prev => ({
-          ...prev,
-          code: data.code
-        }));
-      } else {
-        alert("Failed to generate course code. Please try again.");
-      }
-    } catch (error) {
-      console.error("Error generating course code:", error);
-      alert("Failed to generate course code. Please try again.");
-    } finally {
-      setGeneratingCode(false);
-    }
-  };
-
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
 
@@ -67,13 +73,7 @@ export default function CreateCoursePage() {
       newErrors.title = "Course title is required";
     }
 
-    if (!formData.code.trim()) {
-      newErrors.code = "Course code is required";
-    }
-
-    if (formData.code.length < 3) {
-      newErrors.code = "Course code must be at least 3 characters";
-    }
+    // semesterId is now optional, so no validation needed
 
     if (formData.title.length > 200) {
       newErrors.title = "Title must be less than 200 characters";
@@ -109,8 +109,9 @@ export default function CreateCoursePage() {
         const result = await response.json();
         router.push(`/dashboard/admin/courses/${result._id}`);
       } else {
-        const error = await response.json();
-        alert(`Error creating course: ${error.error?.message || 'Unknown error'}`);
+        const errorData = await response.json();
+        const errorMessage = errorData.error || 'Unknown error occurred';
+        alert(`Error creating course: ${errorMessage}`);
       }
     } catch (error) {
       console.error("Error creating course:", error);
@@ -168,44 +169,32 @@ export default function CreateCoursePage() {
             </p>
           </div>
 
-          {/* Course Code */}
+          {/* Course Semester */}
           <div>
-            <label htmlFor="code" className="block text-sm font-medium text-gray-700 mb-2">
-              Course Code *
+            <label htmlFor="semester" className="block text-sm font-medium text-gray-700 mb-2">
+              Semester
             </label>
-            <div className="flex space-x-2">
-              <input
-                type="text"
-                id="code"
-                name="code"
-                value={formData.code}
-                onChange={handleInputChange}
-                placeholder="e.g., CS101, DS201, ALG301"
-                className={`flex-1 px-3 py-2 border rounded-lg focus:outline-none focus:ring-1 ${
-                  errors.code 
-                    ? "border-red-500 focus:ring-red-500" 
-                    : "border-gray-300 focus:ring-black"
-                }`}
-              />
-              <button
-                type="button"
-                onClick={generateCourseCode}
-                disabled={generatingCode}
-                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50"
-              >
-                {generatingCode ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="h-4 w-4" />
-                )}
-              </button>
-            </div>
-            {errors.code && (
-              <p className="mt-1 text-sm text-red-600">{errors.code}</p>
+            <select
+              id="semester"
+              name="semesterId"
+              value={formData.semesterId || ""} // Set value to empty string for optional selection
+              onChange={handleInputChange}
+              className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-1 ${
+                errors.semesterId 
+                  ? "border-red-500 focus:ring-red-500" 
+                  : "border-gray-300 focus:ring-black"
+              }`}
+            >
+              <option value="">Select a semester (optional)</option>
+              {semesters.map((semester) => (
+                <option key={semester._id} value={semester._id}>
+                  {semester.title}
+                </option>
+              ))}
+            </select>
+            {errors.semesterId && (
+              <p className="mt-1 text-sm text-red-600">{errors.semesterId}</p>
             )}
-            <p className="mt-1 text-xs text-gray-500">
-              Unique identifier for the course (minimum 3 characters)
-            </p>
           </div>
 
           {/* Course Description */}
@@ -271,12 +260,7 @@ export default function CreateCoursePage() {
             <strong>Title:</strong> Use clear, descriptive titles that students can easily understand. Include the main topic or subject area.
           </div>
           <div>
-            <strong>Code:</strong> Create unique, memorable course codes. Common formats include:
-            <ul className="mt-1 ml-4 list-disc">
-              <li>CS101 (Computer Science 101)</li>
-              <li>MATH201 (Mathematics 201)</li>
-              <li>ENG301 (Engineering 301)</li>
-            </ul>
+            <strong>Semester:</strong> Select the semester in which the course will be offered. If the course is not offered in a specific semester, you can leave this field empty.
           </div>
           <div>
             <strong>Description:</strong> Include key information such as:
@@ -286,9 +270,6 @@ export default function CreateCoursePage() {
               <li>Prerequisites or required background knowledge</li>
               <li>Expected difficulty level</li>
             </ul>
-          </div>
-          <div>
-            <strong>Course Code Generation:</strong> Click the refresh button to automatically generate a unique course code based on the title.
           </div>
         </div>
       </div>

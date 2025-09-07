@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
     await User.findByIdAndUpdate(user._id, {
       password: hashedNewPassword,
       passwordExpiresAt: null, // Remove password expiry since it's now permanent
-      profileCompleted: true // Mark profile as completed
+      mustChangePassword: false // Clear the must change password flag
     });
 
     console.log(`✅ Password changed successfully for user: ${user.email}`);

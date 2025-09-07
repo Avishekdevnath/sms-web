@@ -16,10 +16,9 @@ interface Student {
 interface StudentSelectionModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (selectedStudentIds: string[]) => void;
-  missionId: string;
+  onConfirm: (studentIds: string[]) => void;
+  missionId?: string; // Optional: if provided, will exclude students already in this mission
   batchId: string;
-  existingStudentIds: string[];
   isLoading?: boolean;
 }
 
@@ -29,7 +28,6 @@ export default function StudentSelectionModal({
   onConfirm,
   missionId,
   batchId,
-  existingStudentIds,
   isLoading = false
 }: StudentSelectionModalProps) {
   const { showToast } = useToast();
@@ -53,11 +51,10 @@ export default function StudentSelectionModal({
     }
   }, [isOpen, batchId]);
 
-  // Filter students based on search query and existing participants
+  // Filter students based on search query
   useEffect(() => {
     try {
-      // Create a Set for faster lookup and to ensure uniqueness
-      const existingStudentIdsSet = new Set(existingStudentIds);
+      console.log('Filtering students:', { students: students.length, searchQuery, missionId });
       
       let filtered = students.filter(student => {
         try {
@@ -66,23 +63,21 @@ export default function StudentSelectionModal({
             return false;
           }
           
-          if (!existingStudentIdsSet.has(student._id)) { // Exclude already added students
-            if (student.isActive) { // Only active students
-              if (searchQuery === '') {
-                return true;
-              }
-              
-              // Validate search query
-              if (!searchQuery || typeof searchQuery !== 'string') {
-                return true;
-              }
-              
-              // Check if student matches search query
-              const nameMatch = student.name && student.name.toLowerCase().includes(searchQuery.toLowerCase());
-              const emailMatch = student.email && student.email.toLowerCase().includes(searchQuery.toLowerCase());
-              
-              return nameMatch || emailMatch;
+          if (student.isActive) { // Only active students
+            if (searchQuery === '') {
+              return true;
             }
+            
+            // Validate search query
+            if (typeof searchQuery !== 'string') {
+              return true;
+            }
+            
+            // Check if student matches search query
+            const nameMatch = student.name && student.name.toLowerCase().includes(searchQuery.toLowerCase());
+            const emailMatch = student.email && student.email.toLowerCase().includes(searchQuery.toLowerCase());
+            
+            return nameMatch || emailMatch;
           }
           return false;
         } catch (error) {
@@ -91,12 +86,13 @@ export default function StudentSelectionModal({
         }
       });
       
+      console.log('Filtered students result:', filtered.length);
       setFilteredStudents(filtered);
     } catch (error) {
       console.error('Error in student filtering effect:', error);
       setFilteredStudents([]);
     }
-  }, [students, searchQuery, existingStudentIds]);
+  }, [students, searchQuery]);
 
   // Update select all state
   useEffect(() => {
@@ -120,9 +116,16 @@ export default function StudentSelectionModal({
         throw new Error('Invalid batch ID provided');
       }
       
-      const response = await fetch(`${BASE}/api/students/batch?batchId=${batchId}`);
+      // Pass missionId as excludeMissionId to filter out already assigned students
+      const url = missionId 
+        ? `${BASE}/api/students/batch?batchId=${batchId}&excludeMissionId=${missionId}`
+        : `${BASE}/api/students/batch?batchId=${batchId}`;
+      
+      console.log('Fetching batch students from URL:', url);
+      const response = await fetch(url);
       if (response.ok) {
         const data = await response.json();
+        console.log('Batch students API response:', data);
         setStudents(data.data || []);
       } else {
         console.error('Failed to fetch batch students:', response.status, response.statusText);

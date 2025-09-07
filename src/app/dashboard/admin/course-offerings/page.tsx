@@ -50,12 +50,6 @@ interface CourseOffering {
   updatedAt?: string;
 }
 
-interface CourseOfferingFormData {
-  courseId: string;
-  batchId: string;
-  semesterId: string;
-}
-
 interface GroupedCourseOfferings {
   course: Course;
   offerings: CourseOffering[];
@@ -72,16 +66,7 @@ export default function CourseOfferingsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterBatch, setFilterBatch] = useState("");
   const [filterSemester, setFilterSemester] = useState("");
-  const [showCreateForm, setShowCreateForm] = useState(false);
-  const [deletingOffering, setDeletingOffering] = useState<string | null>(null);
-  const [formData, setFormData] = useState<CourseOfferingFormData>({
-    courseId: "",
-    batchId: "",
-    semesterId: ""
-  });
-  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
-  const [submitting, setSubmitting] = useState(false);
-  const [successMessage, setSuccessMessage] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchData();
@@ -90,6 +75,9 @@ export default function CourseOfferingsPage() {
   const fetchData = async () => {
     try {
       setLoading(true);
+      setError(null);
+      console.log("Starting to fetch data...");
+      
       const [offeringsRes, coursesRes, batchesRes, semestersRes] = await Promise.all([
         fetch("/api/course-offerings"),
         fetch("/api/courses?limit=100"),
@@ -97,17 +85,54 @@ export default function CourseOfferingsPage() {
         fetch("/api/semesters?limit=100")
       ]);
 
+      console.log("API responses received:", {
+        offeringsStatus: offeringsRes.status,
+        coursesStatus: coursesRes.status,
+        batchesStatus: batchesRes.status,
+        semestersStatus: semestersRes.status
+      });
+
+      // Check for API errors
+      if (!offeringsRes.ok) {
+        console.error("Course offerings API error:", offeringsRes.status, offeringsRes.statusText);
+      }
+      if (!coursesRes.ok) {
+        console.error("Courses API error:", coursesRes.status, coursesRes.statusText);
+      }
+      if (!batchesRes.ok) {
+        console.error("Batches API error:", batchesRes.status, batchesRes.statusText);
+      }
+      if (!semestersRes.ok) {
+        console.error("Semesters API error:", semestersRes.status, semestersRes.statusText);
+      }
+
       const offeringsData = await offeringsRes.json();
       const coursesData = await coursesRes.json();
       const batchesData = await batchesRes.json();
       const semestersData = await semestersRes.json();
 
+      console.log("Fetched data:", {
+        offerings: offeringsData,
+        courses: coursesData,
+        batches: batchesData,
+        semesters: semestersData
+      });
+
+      // Course Offerings API returns { data: data }
       setCourseOfferings(offeringsData.data || []);
       setCourses(coursesData.courses || []);
-      setBatches(batchesData.data || []);
+      setBatches(batchesData.batches || []);
       setSemesters(semestersData.data || []);
+      
+      console.log("Data set successfully:", {
+        courseOfferingsCount: offeringsData.data?.length || 0,
+        coursesCount: coursesData.courses?.length || 0,
+        batchesCount: batchesData.batches?.length || 0,
+        semestersCount: semestersData.data?.length || 0
+      });
     } catch (error) {
       console.error("Error fetching data:", error);
+      setError(error instanceof Error ? error.message : "Failed to fetch data");
     } finally {
       setLoading(false);
     }
@@ -119,155 +144,88 @@ export default function CourseOfferingsPage() {
     setRefreshing(false);
   };
 
-  // Group offerings by course
+  // Group offerings by course - FIXED: One course can have multiple offerings
   const getGroupedOfferings = (): GroupedCourseOfferings[] => {
-    const grouped = courseOfferings.reduce((acc, offering) => {
-      const courseId = offering.courseId._id;
-      if (!acc[courseId]) {
-        acc[courseId] = {
-          course: offering.courseId,
-          offerings: []
-        };
-      }
-      acc[courseId].offerings.push(offering);
-      return acc;
-    }, {} as Record<string, GroupedCourseOfferings>);
+    if (!courseOfferings || courseOfferings.length === 0) {
+      return [];
+    }
 
-    return Object.values(grouped);
+    // Create a map to group offerings by course
+    const groupedMap = new Map<string, GroupedCourseOfferings>();
+
+    courseOfferings.forEach((offering) => {
+      // Skip offerings with missing critical data
+      if (!offering || !offering._id) {
+        return;
+      }
+
+      // Get course info
+      let course: Course | null = null;
+      if (offering.courseId && offering.courseId._id) {
+        course = offering.courseId;
+      } else {
+        // Try to find course by ID from courses array
+        course = courses.find(c => c._id === offering.courseId?._id) || null;
+      }
+
+      if (!course) {
+        return; // Skip if no valid course found
+      }
+
+      const courseId = course._id;
+      
+      if (!groupedMap.has(courseId)) {
+        groupedMap.set(courseId, {
+          course: course,
+          offerings: []
+        });
+      }
+
+      // Add offering if it has valid batch and semester data
+      if (offering.batchId && offering.batchId._id && offering.semesterId && offering.semesterId._id) {
+        groupedMap.get(courseId)!.offerings.push(offering);
+      }
+    });
+
+    return Array.from(groupedMap.values());
   };
 
   const getFilteredGroupedOfferings = () => {
     let grouped = getGroupedOfferings();
 
-    if (searchTerm) {
-      grouped = grouped.filter(group => 
-        group.course.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        group.course.code.toLowerCase().includes(searchTerm.toLowerCase())
-      );
+    // Apply search filter
+    if (searchTerm && searchTerm.trim()) {
+      grouped = grouped.filter(group => {
+        if (!group.course) return false;
+        const searchLower = searchTerm.toLowerCase();
+        return (
+          (group.course.title && group.course.title.toLowerCase().includes(searchLower)) ||
+          (group.course.code && group.course.code.toLowerCase().includes(searchLower))
+        );
+      });
     }
 
-    if (filterBatch) {
+    // Apply batch filter
+    if (filterBatch && filterBatch.trim()) {
       grouped = grouped.map(group => ({
         ...group,
-        offerings: group.offerings.filter(offering => offering.batchId._id === filterBatch)
+        offerings: group.offerings.filter(offering => 
+          offering.batchId && offering.batchId._id === filterBatch
+        )
       })).filter(group => group.offerings.length > 0);
     }
 
-    if (filterSemester) {
+    // Apply semester filter
+    if (filterSemester && filterSemester.trim()) {
       grouped = grouped.map(group => ({
         ...group,
-        offerings: group.offerings.filter(offering => offering.semesterId._id === filterSemester)
+        offerings: group.offerings.filter(offering => 
+          offering.semesterId && offering.semesterId._id === filterSemester
+        )
       })).filter(group => group.offerings.length > 0);
     }
 
     return grouped;
-  };
-
-  const handleDeleteOffering = async (offeringId: string) => {
-    if (!confirm("Are you sure you want to delete this course offering? This will also delete all related assignments and submissions.")) {
-      return;
-    }
-
-    try {
-      setDeletingOffering(offeringId);
-      const response = await fetch(`/api/course-offerings?id=${offeringId}`, {
-        method: "DELETE",
-      });
-
-      if (response.ok) {
-        setCourseOfferings(offerings => offerings.filter(offering => offering._id !== offeringId));
-        setSuccessMessage("Course offering deleted successfully!");
-        setTimeout(() => setSuccessMessage(""), 3000);
-      } else {
-        const error = await response.json();
-        alert(`Error deleting course offering: ${error.error?.message || 'Unknown error'}`);
-      }
-    } catch (error) {
-      console.error("Error deleting course offering:", error);
-      alert("Failed to delete course offering");
-    } finally {
-      setDeletingOffering(null);
-    }
-  };
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-    
-    if (name === 'batchId') {
-      setFormData(prev => ({
-        ...prev,
-        batchId: value,
-        semesterId: ""
-      }));
-    }
-    
-    if (formErrors[name]) {
-      setFormErrors(prev => ({
-        ...prev,
-        [name]: ""
-      }));
-    }
-  };
-
-  const validateForm = (): boolean => {
-    const errors: Record<string, string> = {};
-
-    if (!formData.courseId) errors.courseId = "Course is required";
-    if (!formData.batchId) errors.batchId = "Batch is required";
-    if (!formData.semesterId) errors.semesterId = "Semester is required";
-
-    setFormErrors(errors);
-    return Object.keys(errors).length === 0;
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!validateForm()) {
-      return;
-    }
-
-    try {
-      setSubmitting(true);
-      const response = await fetch("/api/course-offerings", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(formData),
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        
-        const newOfferingResponse = await fetch(`/api/course-offerings?id=${result.data._id}`);
-        const newOfferingData = await newOfferingResponse.json();
-        
-        setCourseOfferings(prev => [...prev, newOfferingData.data]);
-        
-        setFormData({ courseId: "", batchId: "", semesterId: "" });
-        setShowCreateForm(false);
-        setFormErrors({});
-        setSuccessMessage("Course offering created successfully!");
-        setTimeout(() => setSuccessMessage(""), 3000);
-      } else {
-        const error = await response.json();
-        alert(`Error creating course offering: ${error.error?.message || 'Unknown error'}`);
-      }
-    } catch (error) {
-      console.error("Error creating course offering:", error);
-      alert("Failed to create course offering");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const getSemestersForBatch = (batchId: string) => {
-    return semesters.filter(semester => semester.batchId._id === batchId);
   };
 
   const clearFilters = () => {
@@ -277,11 +235,9 @@ export default function CourseOfferingsPage() {
   };
 
   const handleManageCourse = (course: Course) => {
-    router.push(`/dashboard/admin/course-offerings/${course._id}`);
-  };
-
-  const getCourseOfferings = (courseId: string) => {
-    return courseOfferings.filter(offering => offering.courseId._id === courseId);
+    if (course && course._id) {
+      router.push(`/dashboard/admin/course-offerings/${course._id}`);
+    }
   };
 
   if (loading) {
@@ -290,6 +246,23 @@ export default function CourseOfferingsPage() {
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-black mx-auto"></div>
           <p className="mt-4 text-gray-600">Loading course offerings...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="text-red-500 text-xl mb-4">⚠️ Error</div>
+          <p className="text-gray-600 mb-4">{error}</p>
+          <button
+            onClick={fetchData}
+            className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors"
+          >
+            Try Again
+          </button>
         </div>
       </div>
     );
@@ -316,22 +289,15 @@ export default function CourseOfferingsPage() {
             <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
             Refresh
           </button>
-          <button
-            onClick={() => setShowCreateForm(true)}
+          <Link
+            href="/dashboard/admin/course-offerings/create"
             className="inline-flex items-center px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors"
           >
             <Plus className="h-4 w-4 mr-2" />
             Create Offering
-          </button>
+          </Link>
         </div>
       </div>
-
-      {/* Success Message */}
-      {successMessage && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-          <p className="text-green-800">{successMessage}</p>
-        </div>
-      )}
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -342,7 +308,7 @@ export default function CourseOfferingsPage() {
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-500">Total Offerings</p>
-              <p className="text-2xl font-bold text-black">{courseOfferings.length}</p>
+              <p className="text-2xl font-bold text-black">{courseOfferings?.length || 0}</p>
             </div>
           </div>
         </div>
@@ -354,7 +320,7 @@ export default function CourseOfferingsPage() {
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-500">Active Courses</p>
-              <p className="text-2xl font-bold text-black">{groupedOfferings.length}</p>
+              <p className="text-2xl font-bold text-black">{groupedOfferings?.length || 0}</p>
             </div>
           </div>
         </div>
@@ -367,7 +333,7 @@ export default function CourseOfferingsPage() {
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-500">Active Batches</p>
               <p className="text-2xl font-bold text-black">
-                {new Set(courseOfferings.map(offering => offering.batchId._id)).size}
+                {batches && batches.length > 0 ? batches.length : 0}
               </p>
             </div>
           </div>
@@ -381,134 +347,12 @@ export default function CourseOfferingsPage() {
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-500">Active Semesters</p>
               <p className="text-2xl font-bold text-black">
-                {new Set(courseOfferings.map(offering => offering.semesterId._id)).size}
+                {semesters && semesters.length > 0 ? semesters.length : 0}
               </p>
             </div>
           </div>
         </div>
       </div>
-
-      {/* Create Form */}
-      {showCreateForm && (
-        <div className="border rounded-lg p-6 bg-white">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-medium text-black">Create New Course Offering</h3>
-            <button
-              onClick={() => {
-                setShowCreateForm(false);
-                setFormData({ courseId: "", batchId: "", semesterId: "" });
-                setFormErrors({});
-              }}
-              className="text-gray-500 hover:text-black"
-            >
-              ×
-            </button>
-          </div>
-          
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label htmlFor="courseId" className="block text-sm font-medium text-gray-700 mb-2">
-                  Course *
-                </label>
-                <select
-                  id="courseId"
-                  name="courseId"
-                  value={formData.courseId}
-                  onChange={handleInputChange}
-                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-1 ${
-                    formErrors.courseId ? "border-red-500" : "border-gray-300 focus:ring-black"
-                  }`}
-                >
-                  <option value="">Select a course</option>
-                  {courses.map((course) => (
-                    <option key={course._id} value={course._id}>
-                      {course.code} - {course.title}
-                    </option>
-                  ))}
-                </select>
-                {formErrors.courseId && (
-                  <p className="mt-1 text-sm text-red-600">{formErrors.courseId}</p>
-                )}
-              </div>
-
-              <div>
-                <label htmlFor="batchId" className="block text-sm font-medium text-gray-700 mb-2">
-                  Batch *
-                </label>
-                <select
-                  id="batchId"
-                  name="batchId"
-                  value={formData.batchId}
-                  onChange={handleInputChange}
-                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-1 ${
-                    formErrors.batchId ? "border-red-500" : "border-gray-300 focus:ring-black"
-                  }`}
-                >
-                  <option value="">Select a batch</option>
-                  {batches.map((batch) => (
-                    <option key={batch._id} value={batch._id}>
-                      {batch.code} - {batch.title}
-                    </option>
-                  ))}
-                </select>
-                {formErrors.batchId && (
-                  <p className="mt-1 text-sm text-red-600">{formErrors.batchId}</p>
-                )}
-              </div>
-
-              <div>
-                <label htmlFor="semesterId" className="block text-sm font-medium text-gray-700 mb-2">
-                  Semester *
-                </label>
-                <select
-                  id="semesterId"
-                  name="semesterId"
-                  value={formData.semesterId}
-                  onChange={handleInputChange}
-                  disabled={!formData.batchId}
-                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-1 ${
-                    formErrors.semesterId ? "border-red-500" : "border-gray-300 focus:ring-black"
-                  } ${!formData.batchId ? "bg-gray-100" : ""}`}
-                >
-                  <option value="">Select a semester</option>
-                  {formData.batchId && getSemestersForBatch(formData.batchId).map((semester) => (
-                    <option key={semester._id} value={semester._id}>
-                      Semester {semester.number} - {semester.title || `Semester ${semester.number}`}
-                    </option>
-                  ))}
-                </select>
-                {formErrors.semesterId && (
-                  <p className="mt-1 text-sm text-red-600">{formErrors.semesterId}</p>
-                )}
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end space-x-4 pt-4 border-t">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowCreateForm(false);
-                  setFormData({ courseId: "", batchId: "", semesterId: "" });
-                  setFormErrors({});
-                }}
-                className="px-4 py-2 border border-gray-300 rounded-lg text-sm hover:border-black transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={submitting}
-                className="inline-flex items-center px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50"
-              >
-                {submitting ? "Creating..." : "Create Offering"}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-
 
       {/* Search and Filters */}
       <div className="border rounded-lg p-6 bg-white">
@@ -530,7 +374,7 @@ export default function CourseOfferingsPage() {
             className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-black"
           >
             <option value="">All Batches</option>
-            {batches.map((batch) => (
+            {batches && batches.map((batch) => (
               <option key={batch._id} value={batch._id}>
                 {batch.code} - {batch.title}
               </option>
@@ -543,11 +387,13 @@ export default function CourseOfferingsPage() {
             className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-black"
           >
             <option value="">All Semesters</option>
-            {semesters.map((semester) => (
-              <option key={semester._id} value={semester._id}>
-                {semester.batchId.code} - Semester {semester.number}
-              </option>
-            ))}
+            {semesters && semesters
+              .filter(semester => semester && semester.batchId && semester.batchId.code)
+              .map((semester) => (
+                <option key={semester._id} value={semester._id}>
+                  {semester.batchId?.code || 'Unknown'} - Semester {semester.number}
+                </option>
+              ))}
           </select>
 
           <button
@@ -580,53 +426,78 @@ export default function CourseOfferingsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {groupedOfferings.map((group) => (
-                <tr key={group.course._id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div>
-                      <div className="text-sm font-medium text-gray-900">{group.course.title}</div>
-                      <div className="text-sm text-gray-500">{group.course.code}</div>
-                      {group.course.description && (
-                        <div className="text-xs text-gray-400 mt-1">{group.course.description}</div>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="space-y-2">
-                      {group.offerings.map((offering) => (
-                        <div key={offering._id} className="flex items-center space-x-2">
-                          <span className="text-sm text-gray-900">{offering.batchId.code}</span>
-                          <span className="text-gray-400">•</span>
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
-                            Semester {offering.semesterId.number}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                      {group.offerings.length} offering{group.offerings.length !== 1 ? 's' : ''}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <button
-                      onClick={() => handleManageCourse(group.course)}
-                      className="inline-flex items-center px-3 py-1.5 border border-gray-300 rounded-md text-sm hover:border-black transition-colors"
-                      title="Manage offerings"
-                    >
-                      <Settings className="h-4 w-4 mr-1" />
-                      Manage
-                    </button>
+              {groupedOfferings && groupedOfferings.length > 0 ? (
+                groupedOfferings.map((group) => (
+                  <tr key={group.course?._id || `group-${Math.random()}`} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div>
+                        {group.course ? (
+                          <>
+                            <div className="text-sm font-medium text-gray-900">
+                              {group.course.title || 'Unknown Course'}
+                            </div>
+                            <div className="text-sm text-gray-500">
+                              {group.course.code || 'Unknown Code'}
+                            </div>
+                            {group.course.description && (
+                              <div className="text-xs text-gray-400 mt-1">{group.course.description}</div>
+                            )}
+                          </>
+                        ) : (
+                          <div className="text-sm text-red-600">Invalid Course Data</div>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="space-y-2">
+                        {group.offerings && group.offerings.length > 0 ? (
+                          group.offerings.map((offering) => (
+                            <div key={offering._id} className="flex items-center space-x-2">
+                              <span className="text-sm text-gray-900">
+                                {offering.batchId?.code || 'Unknown Batch'}
+                              </span>
+                              <span className="text-gray-400">•</span>
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                                Semester {offering.semesterId?.number || 'Unknown'}
+                              </span>
+                            </div>
+                          ))
+                        ) : (
+                          <span className="text-sm text-gray-500">No offerings</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                        {group.offerings?.length || 0} offering{(group.offerings?.length || 0) !== 1 ? 's' : ''}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <button
+                        onClick={() => group.course && handleManageCourse(group.course)}
+                        disabled={!group.course}
+                        className="inline-flex items-center px-3 py-1.5 border border-gray-300 rounded-md text-sm hover:border-black transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Manage offerings"
+                      >
+                        <Settings className="h-4 w-4 mr-1" />
+                        Manage
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={4} className="px-6 py-4 text-center text-gray-500">
+                    No course offerings found
                   </td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
         </div>
 
         {/* Empty State */}
-        {groupedOfferings.length === 0 && (
+        {(!groupedOfferings || groupedOfferings.length === 0) && (
           <div className="text-center py-12">
             <LinkIcon className="mx-auto h-12 w-12 text-gray-400" />
             <h3 className="mt-2 text-sm font-medium text-gray-900">No course offerings found</h3>
@@ -635,13 +506,13 @@ export default function CourseOfferingsPage() {
             </p>
             {!searchTerm && !filterBatch && !filterSemester && (
               <div className="mt-6">
-                <button
-                  onClick={() => setShowCreateForm(true)}
+                <Link
+                  href="/dashboard/admin/course-offerings/create"
                   className="inline-flex items-center px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors"
                 >
                   <Plus className="h-4 w-4 mr-2" />
                   Create Offering
-                </button>
+                </Link>
               </div>
             )}
           </div>

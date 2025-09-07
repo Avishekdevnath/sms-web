@@ -62,22 +62,22 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Send invitation email
-    const invitationLink = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/profile-complete?token=${invitationToken}`;
+    // Send invitation email - new students should go through invitation flow
+    const invitationLink = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/invitation?token=${invitationToken}`;
     
     const emailContent = {
       to: studentEmail,
-      subject: isReinvite ? 'Re-invitation to Complete Your Profile' : 'Complete Your Student Profile',
+      subject: isReinvite ? 'Re-invitation to Join Student Management System' : 'Welcome to Student Management System',
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <h2 style="color: #333;">Welcome to Student Management System</h2>
           <p>Hello!</p>
-          <p>${isReinvite ? 'This is a reminder to complete your student profile.' : 'You have been enrolled as a student. Please complete your profile to get started.'}</p>
-          <p>Click the button below to complete your profile:</p>
+          <p>${isReinvite ? 'This is a reminder to complete your account setup.' : 'You have been enrolled as a student. Please click the link below to set up your account.'}</p>
+          <p>Click the button below to get started:</p>
           <div style="text-align: center; margin: 30px 0;">
             <a href="${invitationLink}" 
                style="background-color: #000; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
-              Complete Profile
+              Set Up Account
             </a>
           </div>
           <p>This invitation will expire in 7 days.</p>

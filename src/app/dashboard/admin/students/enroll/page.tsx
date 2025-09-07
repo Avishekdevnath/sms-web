@@ -59,7 +59,6 @@ export default function StudentEnrollPage() {
   const [bulkWorkflow, setBulkWorkflow] = useState<'upload' | 'validate' | 'enroll'>('upload');
   const [bulkLoading, setBulkLoading] = useState(false);
   const [bulkBatchId, setBulkBatchId] = useState<string>('');
-  const [bulkNotes, setBulkNotes] = useState<string>('');
 
   useEffect(() => {
     fetchBatches();
@@ -72,7 +71,9 @@ export default function StudentEnrollPage() {
       const response = await fetch('/api/batches');
       if (response.ok) {
         const data = await response.json();
-        setBatches(data.data || []);
+        console.log('Batches API response:', data);
+        console.log('Batches data:', data.batches);
+        setBatches(data.batches || []);
       } else {
         console.error('Failed to fetch batches:', response.status, response.statusText);
         setError('Failed to load batches. Please try again.');
@@ -90,8 +91,22 @@ export default function StudentEnrollPage() {
       const response = await fetch('/api/students/enroll');
       if (response.ok) {
         const data = await response.json();
-        // Calculate stats from enrollment data
-        // This would need to be implemented in the API
+        if (data.success && data.data) {
+          const enrollments = data.data;
+          const total = enrollments.length;
+          const pending = enrollments.filter((e: any) => e.status === 'pending').length;
+          const invited = enrollments.filter((e: any) => e.invitationStatus === 'sent').length;
+          const activated = enrollments.filter((e: any) => e.status === 'approved').length;
+          const rejected = enrollments.filter((e: any) => e.status === 'rejected').length;
+          
+          setStats({
+            total,
+            pending,
+            invited,
+            activated,
+            rejected
+          });
+        }
       }
     } catch (error) {
       console.error('Error fetching stats:', error);
@@ -164,8 +179,15 @@ export default function StudentEnrollPage() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error?.message || 'Failed to enroll student');
+        let errorMessage = 'Failed to enroll student';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error?.message || errorData.message || `HTTP ${response.status}: ${response.statusText}`;
+        } catch (parseError) {
+          console.error('Failed to parse error response:', parseError);
+          errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+        }
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
@@ -210,9 +232,13 @@ export default function StudentEnrollPage() {
   };
 
   const validateBulkEmails = async () => {
-           const emails = bulkEmailText.split('\n').filter(line => line.trim()).map(line => line.trim());
-       setBulkEmails(emails.map(email => ({ id: `email-${Date.now()}-${Math.random()}`, email, status: 'pending' as const })));
-       setBulkWorkflow('validate');
+    const emails = bulkEmailText.split('\n').filter(line => line.trim()).map(line => line.trim());
+    setBulkEmails(emails.map(email => ({ 
+      id: `email-${Date.now()}-${Math.random()}`, 
+      email, 
+      status: 'pending' as const 
+    })));
+    setBulkWorkflow('validate');
   };
 
   const processBulkEnrollment = async () => {
@@ -221,38 +247,59 @@ export default function StudentEnrollPage() {
       return;
     }
 
+    if (bulkEmails.length === 0) {
+      setError('No emails to process');
+      return;
+    }
+
     try {
       setBulkLoading(true);
       setError('');
 
+      const payload = {
+        emails: bulkEmails.map(e => e.email),
+        batchId: bulkBatchId
+      };
+
+      console.log('Bulk enrollment payload:', payload);
+
       const response = await fetch('/api/students/enroll', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-                     body: JSON.stringify({ 
-               emails: bulkEmails.map(e => e.email),
-               batchId: bulkBatchId
-             })
+        body: JSON.stringify(payload)
       });
 
+      console.log('Bulk enrollment response status:', response.status);
+
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error?.message || 'Bulk enrollment failed');
+        let errorMessage = 'Bulk enrollment failed';
+        try {
+          const errorData = await response.json();
+          console.error('Bulk enrollment error response:', errorData);
+          errorMessage = errorData.error?.message || errorData.message || `HTTP ${response.status}: ${response.statusText}`;
+        } catch (parseError) {
+          console.error('Failed to parse error response:', parseError);
+          errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+        }
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
+      console.log('Bulk enrollment success response:', data);
       
       if (data.success) {
         setSuccess(`Bulk enrollment completed! ${data.results.successful} successful, ${data.results.failed} failed.`);
         setBulkWorkflow('upload');
-                     setBulkEmailText('');
-             setBulkEmails([]);
-             setBulkBatchId('');
+        setBulkEmailText('');
+        setBulkEmails([]);
+        setBulkBatchId('');
         fetchEnrollmentStats();
       } else {
         throw new Error(data.error?.message || 'Bulk enrollment failed');
       }
 
     } catch (error) {
+      console.error('Bulk enrollment error:', error);
       setError(error instanceof Error ? error.message : 'Bulk enrollment failed');
     } finally {
       setBulkLoading(false);
@@ -402,9 +449,12 @@ export default function StudentEnrollPage() {
                   onChange={(e) => setBulkBatchId(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   required
+                  disabled={loading}
                 >
-                  <option value="">Select a batch</option>
-                  {batches.map((batch) => (
+                  <option value="">
+                    {loading ? 'Loading batches...' : 'Select a batch'}
+                  </option>
+                  {batches?.map((batch) => (
                     <option key={batch._id} value={batch._id}>
                       {batch.code} - {batch.title}
                     </option>
@@ -533,9 +583,12 @@ export default function StudentEnrollPage() {
                 onChange={(e) => handleInputChange('batchId', e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 required
+                disabled={loading}
               >
-                <option value="">Select a batch</option>
-                {batches.map((batch) => (
+                <option value="">
+                  {loading ? 'Loading batches...' : 'Select a batch'}
+                </option>
+                {batches?.map((batch) => (
                   <option key={batch._id} value={batch._id}>
                     {batch.code} - {batch.title}
                   </option>

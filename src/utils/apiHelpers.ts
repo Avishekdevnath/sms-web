@@ -34,9 +34,10 @@ export function createMessageResponse(message: string, status: number = 200): Ne
 
 // Error response helpers
 export function createErrorResponse(error: string, status: number = 400): NextResponse {
-  const response: ApiResponse<never> = {
+  const response = {
     success: false,
-    error
+    error,
+    data: null as never
   };
   return NextResponse.json(response, { status });
 }
@@ -141,7 +142,9 @@ export function createBulkUpdateResponse(
 export function parseQueryParams<T extends Record<string, any>>(searchParams: URLSearchParams): T {
   const params: any = {};
   
-  for (const [key, value] of searchParams.entries()) {
+  // Convert to array to avoid iteration issues
+  const entries = Array.from(searchParams.entries());
+  for (const [key, value] of entries) {
     // Handle boolean values
     if (value === 'true') {
       params[key] = true;
@@ -154,7 +157,7 @@ export function parseQueryParams<T extends Record<string, any>>(searchParams: UR
     }
     // Handle arrays (comma-separated values)
     else if (value.includes(',')) {
-      params[key] = value.split(',').map(v => v.trim());
+      params[key] = value.split(',').map((v: string) => v.trim());
     }
     // Handle regular strings
     else {
@@ -259,6 +262,15 @@ export function transformMongoResponse<T>(data: T): T {
         } else if (value && typeof value === 'object' && value.buffer) {
           // Handle ObjectId buffer representation
           transformed[key] = value.toString();
+        } else if (value && typeof value === 'object' && value.$date) {
+          // Handle MongoDB date format
+          transformed[key] = value.$date;
+        } else if (value && typeof value === 'object' && value.$numberLong) {
+          // Handle MongoDB timestamp format
+          transformed[key] = parseInt(value.$numberLong);
+        } else if (value instanceof Date) {
+          // Handle Date objects directly
+          transformed[key] = value.toISOString();
         } else {
           transformed[key] = transformMongoResponse(value);
         }

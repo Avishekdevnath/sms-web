@@ -7,7 +7,10 @@ import { emailService } from "@/lib/email";
 import { PASSWORD_EXPIRY_DAYS } from "@/lib/env";
 
 const forgotPasswordSchema = z.object({
-  email: z.string().email("Please enter a valid email address")
+  loginIdentifier: z.string().min(1, "Login identifier is required"),
+  loginMethod: z.enum(["email", "username", "phone"], { 
+    required_error: "Login method is required" 
+  })
 });
 
 export async function POST(req: NextRequest) {
@@ -15,14 +18,24 @@ export async function POST(req: NextRequest) {
     await connectToDatabase();
     
     const body = await req.json();
-    const { email } = forgotPasswordSchema.parse(body);
+    const { loginIdentifier, loginMethod } = forgotPasswordSchema.parse(body);
 
-    // Find the user
-    const user = await User.findOne({ 
-      email: email.toLowerCase(),
+    // Build query based on login method
+    let query: any = {
       isActive: true,
       deletedAt: { $exists: false }
-    });
+    };
+
+    if (loginMethod === "email") {
+      query.email = loginIdentifier.toLowerCase();
+    } else if (loginMethod === "username") {
+      query.username = loginIdentifier;
+    } else if (loginMethod === "phone") {
+      query.phone = loginIdentifier;
+    }
+
+    // Find the user
+    const user = await User.findOne(query);
 
     if (!user) {
       // Don't reveal if user exists or not for security

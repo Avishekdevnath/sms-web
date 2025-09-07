@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { ArrowLeft, Edit, User, Mail, Phone, GraduationCap, Calendar, BookOpen, Save } from "lucide-react";
 import Link from "next/link";
+import ProfilePicture from "@/components/shared/ProfilePicture";
 
 interface StudentProfile {
   _id: string;
@@ -45,6 +46,7 @@ export default function StudentProfilePage() {
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState("");
+  const fetchingRef = useRef(false); // Add ref to prevent multiple simultaneous calls
 
   const [formData, setFormData] = useState({
     firstName: "",
@@ -61,21 +63,40 @@ export default function StudentProfilePage() {
   });
 
   useEffect(() => {
+    console.log('Profile page - Auth context state:', { user: !!user, loading, userRole: user?.role });
+    
     if (user) {
       fetchStudentProfile();
+    } else if (!loading) {
+      // If no user and not loading, redirect to login
+      console.log('Profile page - No user found, redirecting to login');
+      window.location.href = '/login';
     }
-  }, [user]);
+  }, [user]); // Remove 'loading' from dependency array to prevent infinite loop
 
   const fetchStudentProfile = async () => {
+    // Prevent multiple simultaneous API calls
+    if (fetchingRef.current) {
+      console.log('Profile page - Already fetching profile, skipping...');
+      return;
+    }
+    
     try {
+      console.log('Profile page - Fetching student profile...');
+      fetchingRef.current = true;
       setLoading(true);
       const response = await fetch(`/api/student-profiles/me`);
       
+      console.log('Profile page - Profile fetch response status:', response.status);
+      
       if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Profile page - Profile fetch failed:', errorData);
         throw new Error("Failed to fetch student profile");
       }
       
       const data = await response.json();
+      console.log('Profile page - Profile data received:', data);
       setProfile(data.profile);
       
       // Set form data for editing
@@ -97,6 +118,7 @@ export default function StudentProfilePage() {
       setError("Failed to load student profile");
     } finally {
       setLoading(false);
+      fetchingRef.current = false; // Reset the ref
     }
   };
 
@@ -186,6 +208,8 @@ export default function StudentProfilePage() {
     return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
   };
 
+  // Remove the custom renderProfilePicture function since we're using the component now
+
   const getStatusBadge = (profile: StudentProfile) => {
     const isUserActive = profile.userId.isActive;
     const isProfileCompleted = profile.userId.profileCompleted;
@@ -199,12 +223,15 @@ export default function StudentProfilePage() {
     return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Active</span>;
   };
 
-  if (loading) {
+  // Show loading state while auth context is loading or while fetching profile
+  if (loading || !user) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-black mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading your profile...</p>
+          <p className="mt-4 text-gray-600">
+            {loading ? "Loading your profile..." : "Authenticating..."}
+          </p>
         </div>
       </div>
     );
@@ -231,31 +258,34 @@ export default function StudentProfilePage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-4">
-          <Link
-            href="/dashboard/student"
-            className="flex items-center text-gray-600 hover:text-black transition-colors"
-          >
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Dashboard
-          </Link>
-          <div>
-            <h1 className="text-3xl font-bold text-black">My Profile</h1>
-            <p className="mt-2 text-gray-600">
-              View and manage your student profile
-            </p>
+      <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-6">
+            <Link
+              href="/dashboard/student"
+              className="flex items-center px-3 py-2 text-gray-500 hover:text-gray-700 hover:bg-gray-50 rounded-md transition-all duration-200 group"
+            >
+              <ArrowLeft className="h-4 w-4 mr-2 group-hover:-translate-x-1 transition-transform duration-200" />
+              <span className="text-sm font-medium">Dashboard</span>
+            </Link>
+            <div className="h-6 w-px bg-gray-300"></div>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Student Profile</h1>
+              <p className="text-sm text-gray-500 mt-1">
+                Manage your personal information and academic details
+              </p>
+            </div>
           </div>
+          {!isEditing && (
+            <button
+              onClick={() => setIsEditing(true)}
+              className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-200 shadow-sm"
+            >
+              <Edit className="h-4 w-4 mr-2" />
+              Edit Profile
+            </button>
+          )}
         </div>
-        {!isEditing && (
-          <button
-            onClick={() => setIsEditing(true)}
-            className="inline-flex items-center px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors"
-          >
-            <Edit className="h-4 w-4 mr-2" />
-            Edit Profile
-          </button>
-        )}
       </div>
 
       {/* Alerts */}
@@ -276,19 +306,14 @@ export default function StudentProfilePage() {
         <div className="lg:col-span-1">
           <div className="bg-white border rounded-lg p-6">
             <div className="text-center mb-6">
-              {profile.profilePicture ? (
-                <img
-                  className="h-24 w-24 rounded-full mx-auto mb-4"
-                  src={profile.profilePicture}
-                  alt={profile.firstName}
-                />
-              ) : (
-                <div className="h-24 w-24 rounded-full bg-gray-300 flex items-center justify-center mx-auto mb-4">
-                  <span className="text-2xl font-medium text-gray-700">
-                    {getInitials(profile.firstName, profile.lastName)}
-                  </span>
-                </div>
-              )}
+              <ProfilePicture
+                src={profile.profilePicture}
+                alt={`${profile.firstName} ${profile.lastName}`}
+                firstName={profile.firstName}
+                lastName={profile.lastName}
+                size="xl"
+                className="mx-auto mb-4"
+              />
               <h2 className="text-xl font-semibold text-gray-900">
                 {profile.firstName} {profile.lastName}
               </h2>

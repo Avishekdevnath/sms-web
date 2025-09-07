@@ -2,24 +2,9 @@ import { Schema, model, models, Types } from "mongoose";
 
 export interface IMissionCourse {
   courseOfferingId: Types.ObjectId;
-  weight: number; // Weight of this course in the mission (percentage)
+  weight: number; // Percentage weight of this course in the mission
   requiredAssignments?: Types.ObjectId[]; // Specific assignments that must be completed
-  minProgress?: number; // Minimum progress percentage required
-}
-
-export interface IMissionStudent {
-  studentId: Types.ObjectId;
-  mentorId?: Types.ObjectId | null;
-  status: 'active' | 'completed' | 'failed' | 'dropped';
-  progress: number;
-  startedAt: Date;
-  completedAt?: Date;
-  courseProgress: {
-    courseOfferingId: Types.ObjectId;
-    progress: number;
-    completedAssignments: Types.ObjectId[];
-    lastActivity: Date;
-  }[];
+  minProgress: number; // Minimum progress percentage required
 }
 
 export interface IMission {
@@ -32,7 +17,13 @@ export interface IMission {
   endDate?: Date; // Optional end date
   status: 'draft' | 'active' | 'paused' | 'completed' | 'archived';
   courses: IMissionCourse[];
-  students: IMissionStudent[];
+  // REMOVED: students: IMissionStudent[]; // Now using StudentMission collection
+  mentors: {
+    mentorId: Types.ObjectId;
+    role: 'primary' | 'secondary' | 'moderator';
+    specialization: string[];
+  }[];
+  mentorshipGroups: Types.ObjectId[];
   maxStudents?: number; // Optional max students
   requirements?: string[];
   rewards?: string[];
@@ -45,24 +36,7 @@ const MissionCourseSchema = new Schema<IMissionCourse>({
   courseOfferingId: { type: Schema.Types.ObjectId, ref: "CourseOffering", required: true },
   weight: { type: Number, required: true, min: 0, max: 100 },
   requiredAssignments: [{ type: Schema.Types.ObjectId, ref: "Assignment" }],
-  minProgress: { type: Number, min: 0, max: 100 }
-});
-
-const MissionStudentCourseProgressSchema = new Schema({
-  courseOfferingId: { type: Schema.Types.ObjectId, ref: "CourseOffering", required: true },
-  progress: { type: Number, required: true, min: 0, max: 100, default: 0 },
-  completedAssignments: [{ type: Schema.Types.ObjectId, ref: "Assignment" }],
-  lastActivity: { type: Date, default: Date.now }
-});
-
-const MissionStudentSchema = new Schema<IMissionStudent>({
-  studentId: { type: Schema.Types.ObjectId, ref: "User", required: true },
-  mentorId: { type: Schema.Types.ObjectId, ref: "User" },
-  status: { type: String, enum: ['active', 'completed', 'failed', 'dropped'], default: 'active' },
-  progress: { type: Number, required: true, min: 0, max: 100, default: 0 },
-  startedAt: { type: Date, default: Date.now },
-  completedAt: { type: Date },
-  courseProgress: [MissionStudentCourseProgressSchema]
+  minProgress: { type: Number, min: 0, max: 100, required: true }
 });
 
 const MissionSchema = new Schema<IMission>(
@@ -75,22 +49,26 @@ const MissionSchema = new Schema<IMission>(
     endDate: { type: Date }, // Made optional
     status: { type: String, enum: ['draft', 'active', 'paused', 'completed', 'archived'], default: 'draft' },
     courses: [MissionCourseSchema],
-    students: [MissionStudentSchema],
-    maxStudents: { type: Number, min: 1 }, // Already optional
+    // REMOVED: students: [MissionStudentSchema], // Now using StudentMission collection
+    mentors: [{
+      mentorId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+      role: { type: String, enum: ['primary', 'secondary', 'moderator'], required: true },
+      specialization: [{ type: String }]
+    }],
+    mentorshipGroups: [{ type: Schema.Types.ObjectId, ref: "MentorshipGroup" }],
+    maxStudents: { type: Number, min: 0, default: 0 }, // 0 = unlimited
     requirements: [{ type: String }],
     rewards: [{ type: String }],
-    createdBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    createdBy: { type: Schema.Types.ObjectId, ref: "User", required: true }
   },
   { timestamps: true }
 );
 
 // Indexes for efficient querying
-MissionSchema.index({ code: 1 }, { unique: true }); // Unique index for mission code
-MissionSchema.index({ status: 1, startDate: 1 });
-MissionSchema.index({ batchId: 1, status: 1 }); // Add batch-specific index
-MissionSchema.index({ "courses.courseOfferingId": 1 });
-
-// Compound index for mission lookup by student and status
-MissionSchema.index({ "students.studentId": 1, status: 1 });
+MissionSchema.index({ code: 1 }, { unique: true }); // Unique mission code
+MissionSchema.index({ batchId: 1 }); // Find missions by batch
+MissionSchema.index({ status: 1 }); // Filter by status
+MissionSchema.index({ createdBy: 1 }); // Find missions by creator
+MissionSchema.index({ "batchId": 1, "status": 1 }); // Compound index for batch + status queries
 
 export const Mission = models.Mission || model<IMission>("Mission", MissionSchema); 

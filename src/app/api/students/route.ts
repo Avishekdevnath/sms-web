@@ -9,7 +9,7 @@ import { generateNextUserId } from "@/lib/userid";
 import { StudentBatchMembership } from "@/models/StudentBatchMembership";
 import { StudentEnrollment } from "@/models/StudentEnrollment";
 import { MissionParticipant } from "@/models/MissionParticipant";
-import { StudentAssignmentSubmission } from "@/models/StudentAssignmentSubmission";
+
 
 const createSchema = z.object({
   email: z.string().email(),
@@ -514,9 +514,8 @@ export async function DELETE(req: NextRequest) {
       const participantResult = await MissionParticipant.deleteMany({ studentId: id });
       console.log(`Deleted ${participantResult.deletedCount} mission participants`);
       
-      // 5. Delete assignment submissions
-      const submissionResult = await StudentAssignmentSubmission.deleteMany({ studentId: id });
-      console.log(`Deleted ${submissionResult.deletedCount} assignment submissions`);
+      // 5. Assignment submissions are now handled through the Assignment model's completedEmails array
+      // No separate deletion needed as they're part of the assignment data
       
       // 6. Finally, soft delete the user
       const userUpdateResult = await User.findByIdAndUpdate(id, { 

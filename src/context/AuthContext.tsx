@@ -17,6 +17,7 @@ interface AuthContextType {
   loading: boolean;
   login: (userData: User) => void;
   logout: () => void;
+  updateUser: (updates: Partial<User>) => void;
   isAuthenticated: boolean;
 }
 
@@ -71,6 +72,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.log('Auth check - Token found:', !!token);
         
         if (token) {
+          console.log('Auth check - Found token, length:', token.length);
           // Verify token with backend
           const response = await fetch('/api/auth/verify', {
             method: 'GET',
@@ -78,6 +80,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               'Authorization': `Bearer ${token}`
             }
           });
+          
+          console.log('Auth check - Token verification response status:', response.status);
           
           if (response.ok) {
             const userData = await response.json();
@@ -148,11 +152,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     router.push('/login');
   };
 
+  const updateUser = (updates: Partial<User>) => {
+    setUser(prevUser => {
+      if (prevUser) {
+        return { ...prevUser, ...updates };
+      }
+      return null;
+    });
+  };
+
   const value: AuthContextType = {
     user,
     loading,
     login,
     logout,
+    updateUser,
     isAuthenticated: !!user,
   };
 

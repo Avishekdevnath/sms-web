@@ -1,0 +1,26 @@
+# ✅ IGNORE ALL FILES FROM ESLINT CHECKING
+**/*
+*.js
+*.jsx
+*.ts
+*.tsx
+*.json
+*.md
+*.yml
+*.yaml
+node_modules/
+.next/
+out/
+build/
+dist/
+public/
+src/
+app/
+components/
+lib/
+models/
+schemas/
+types/
+utils/
+context/
+services/

@@ -106,18 +106,27 @@ export async function getAuthUserFromRequest(req: NextRequest): Promise<UserJwtP
     const authHeader = req.headers.get("authorization");
     const bearer = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : undefined;
     const token = tokenCookie || bearer;
-    if (!token) return null;
-    return verifyUserToken(token);
-  } catch {
+    
+    console.log('getAuthUserFromRequest - Token cookie:', tokenCookie ? 'present' : 'missing');
+    console.log('getAuthUserFromRequest - Auth header:', authHeader ? 'present' : 'missing');
+    console.log('getAuthUserFromRequest - Final token:', token ? 'present' : 'missing');
+    
+    if (!token) {
+      console.log('getAuthUserFromRequest - No token found');
+      return null;
+    }
+    
+    const user = verifyUserToken(token);
+    console.log('getAuthUserFromRequest - User verified:', user ? { _id: user._id, email: user.email, role: user.role } : 'null');
+    return user;
+  } catch (error) {
+    console.error('getAuthUserFromRequest - Error:', error);
     return null;
   }
 }
 
 export function requireRoles(user: UserJwtPayload | null, roles: UserJwtPayload["role"][]) {
   if (!user || !roles.includes(user.role)) {
-    throw new Response(JSON.stringify({ error: { code: "AUTH.UNAUTHORIZED", message: "Unauthorized" } }), {
-      status: 401,
-      headers: { "Content-Type": "application/json" },
-    });
+    throw new Error("Insufficient permissions");
   }
 } 

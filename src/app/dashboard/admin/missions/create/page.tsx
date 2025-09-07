@@ -30,6 +30,7 @@ interface CourseOffering {
 }
 
 interface MissionFormData {
+  code?: string; // Add optional code field
   title: string;
   description: string;
   batchId: string;
@@ -60,7 +61,7 @@ export default function CreateMissionPage() {
     batchId: "",
     startDate: "",
     endDate: "",
-    maxStudents: 50,
+    maxStudents: 0, // 0 = unlimited
     requirements: [""],
     rewards: [""],
     status: "draft",
@@ -79,6 +80,11 @@ export default function CreateMissionPage() {
     }
   }, [selectedBatch]);
 
+  // ✅ Auto-generate first mission code on mount
+  useEffect(() => {
+    generateMissionCode();
+  }, []); // Empty dependency array - only run once on mount
+
   const fetchBatches = async () => {
     try {
       const response = await fetch('/api/batches?limit=100');
@@ -96,7 +102,7 @@ export default function CreateMissionPage() {
       const response = await fetch(`/api/course-offerings?batchId=${batchId}&limit=100`);
       if (response.ok) {
         const data = await response.json();
-        setCourseOfferings(data.courseOfferings || []);
+        setCourseOfferings(data.data || []);
       }
     } catch (error) {
       console.error('Error fetching course offerings:', error);
@@ -215,18 +221,28 @@ export default function CreateMissionPage() {
     try {
       setLoading(true);
       
-      const response = await fetch('/api/missions', {
+      // Prepare submission data
+      const submissionData = {
+        ...formData,
+        // Only send code if it's manually entered, otherwise let system generate
+        code: formData.code && formData.code.trim() !== "" ? formData.code.trim() : undefined,
+        startDate: formData.startDate.trim() || undefined,
+        endDate: formData.endDate.trim() || undefined,
+        requirements: formData.requirements.filter(r => r.trim() !== ""),
+        rewards: formData.rewards.filter(r => r.trim() !== ""),
+        // Allow unlimited capacity (0 = unlimited)
+        maxStudents: formData.maxStudents || 0
+      };
+      
+      console.log('Submitting mission data:', submissionData);
+      console.log('maxStudents value:', submissionData.maxStudents, 'type:', typeof submissionData.maxStudents);
+      
+      const response = await fetch('/api/v2/missions', { // Use V2 API
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          ...formData,
-          startDate: formData.startDate.trim() || undefined,
-          endDate: formData.endDate.trim() || undefined,
-          requirements: formData.requirements.filter(r => r.trim() !== ""),
-          rewards: formData.rewards.filter(r => r.trim() !== "")
-        }),
+        body: JSON.stringify(submissionData),
       });
 
       if (response.ok) {
@@ -235,13 +251,44 @@ export default function CreateMissionPage() {
         router.push('/dashboard/admin/missions');
       } else {
         const error = await response.json();
-        alert(`Error creating mission: ${error.error?.message || 'Unknown error'}`);
+        console.error('Mission creation error:', error);
+        
+        // Handle V2 API validation errors
+        if (error.error === 'Validation failed' && error.details) {
+          const errorMessages = error.details.map((err: any) => 
+            `${err.path.join('.')}: ${err.message}`
+          ).join('\n');
+          alert(`Validation errors:\n${errorMessages}`);
+        } else {
+          alert(`Error creating mission: ${error.error || 'Unknown error'}`);
+        }
       }
     } catch (error) {
       console.error('Error creating mission:', error);
       alert("Failed to create mission");
     } finally {
       setLoading(false);
+    }
+  };
+
+  // ✅ Generate mission code function
+  const generateMissionCode = async () => {
+    try {
+      const response = await fetch('/api/v2/missions/generate-code', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.data) {
+          setFormData(prev => ({ ...prev, code: data.data.code }));
+        }
+      }
+    } catch (error) {
+      console.error('Error generating mission code:', error);
     }
   };
 
@@ -252,10 +299,11 @@ export default function CreateMissionPage() {
         <div className="flex items-center space-x-4">
           <Link
             href="/dashboard/admin/missions"
-            className="inline-flex items-center text-gray-600 hover:text-gray-900"
+            className="group relative inline-flex items-center justify-center w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors duration-200"
+            title="Back to Missions"
           >
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Missions
+            <ArrowLeft className="w-5 h-5 text-gray-600 group-hover:text-gray-800" />
+            <span className="sr-only">Back to Missions</span>
           </Link>
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Create New Mission</h1>
@@ -266,10 +314,13 @@ export default function CreateMissionPage() {
 
       {/* Mission Form */}
       <form onSubmit={handleSubmit} className="space-y-8">
-        <div className="bg-white rounded-lg border p-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-6">Basic Information</h2>
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-8">
+          <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
+            <div className="w-2 h-2 bg-blue-500 rounded-full mr-3"></div>
+            Basic Information
+          </h2>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Mission Title *
@@ -278,10 +329,36 @@ export default function CreateMissionPage() {
                 type="text"
                 value={formData.title}
                 onChange={(e) => handleInputChange('title', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 hover:border-gray-400"
                 placeholder="Enter mission title"
                 required
               />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Mission Code
+              </label>
+              <div className="flex space-x-2">
+                <input
+                  type="text"
+                  value={formData.code || ""}
+                  onChange={(e) => handleInputChange('code', e.target.value)}
+                  className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 hover:border-gray-400"
+                  placeholder="MISSION-001 (auto-generated if empty)"
+                />
+                <button
+                  type="button"
+                  onClick={generateMissionCode}
+                  className="px-4 py-3 bg-blue-100 text-blue-700 border border-blue-300 rounded-lg hover:bg-blue-200 transition-colors duration-200"
+                  title="Generate new mission code"
+                >
+                  Generate
+                </button>
+              </div>
+              <p className="mt-1 text-sm text-gray-500">
+                Leave empty for auto-generation or enter custom code (format: MISSION-XXX)
+              </p>
             </div>
 
             <div>
@@ -291,7 +368,7 @@ export default function CreateMissionPage() {
               <select
                 value={formData.status}
                 onChange={(e) => handleInputChange('status', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 hover:border-gray-400"
               >
                 <option value="draft">Draft</option>
                 <option value="active">Active</option>
@@ -330,10 +407,19 @@ export default function CreateMissionPage() {
               <input
                 type="number"
                 value={formData.maxStudents}
-                onChange={(e) => handleInputChange('maxStudents', e.target.value ? parseInt(e.target.value) || 1 : 1)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                onChange={(e) => {
+                  const value = parseInt(e.target.value) || 1;
+                  // Ensure value is at least 1 (no upper limit)
+                  const clampedValue = Math.max(1, value);
+                  handleInputChange('maxStudents', clampedValue);
+                }}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 hover:border-gray-400"
                 min="1"
+                step="1"
               />
+              <p className="mt-1 text-sm text-gray-500">
+                Enter the maximum number of students for this mission
+              </p>
             </div>
 
             <div>
@@ -344,7 +430,7 @@ export default function CreateMissionPage() {
                 type="datetime-local"
                 value={formData.startDate}
                 onChange={(e) => handleInputChange('startDate', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 hover:border-gray-400"
               />
             </div>
 
@@ -356,7 +442,7 @@ export default function CreateMissionPage() {
                 type="datetime-local"
                 value={formData.endDate}
                 onChange={(e) => handleInputChange('endDate', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 hover:border-gray-400"
               />
             </div>
           </div>
@@ -369,15 +455,18 @@ export default function CreateMissionPage() {
               value={formData.description}
               onChange={(e) => handleInputChange('description', e.target.value)}
               rows={4}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 hover:border-gray-400"
               placeholder="Enter mission description"
             />
           </div>
         </div>
 
         {/* Requirements */}
-        <div className="bg-white rounded-lg border p-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-6">Requirements</h2>
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-8">
+          <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
+            <div className="w-2 h-2 bg-yellow-500 rounded-full mr-3"></div>
+            Requirements
+          </h2>
           
           {formData.requirements.map((requirement, index) => (
             <div key={index} className="flex items-center space-x-2 mb-2">
@@ -385,7 +474,7 @@ export default function CreateMissionPage() {
                 type="text"
                 value={requirement}
                 onChange={(e) => handleRequirementChange(index, e.target.value)}
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 hover:border-gray-400"
                 placeholder="Enter requirement"
               />
               <button
@@ -401,7 +490,7 @@ export default function CreateMissionPage() {
           <button
             type="button"
             onClick={addRequirement}
-            className="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+            className="mt-4 inline-flex items-center px-4 py-3 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-all duration-200 hover:border-yellow-300 hover:shadow-sm"
           >
             <Plus className="w-4 h-4 mr-2" />
             Add Requirement
@@ -409,8 +498,11 @@ export default function CreateMissionPage() {
         </div>
 
         {/* Rewards */}
-        <div className="bg-white rounded-lg border p-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-6">Rewards</h2>
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-8">
+          <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
+            <div className="w-2 h-2 bg-purple-500 rounded-full mr-3"></div>
+            Rewards
+          </h2>
           
           {formData.rewards.map((reward, index) => (
             <div key={index} className="flex items-center space-x-2 mb-2">
@@ -418,7 +510,7 @@ export default function CreateMissionPage() {
                 type="text"
                 value={reward}
                 onChange={(e) => handleRewardChange(index, e.target.value)}
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 hover:border-gray-400"
                 placeholder="Enter reward"
               />
               <button
@@ -434,7 +526,7 @@ export default function CreateMissionPage() {
           <button
             type="button"
             onClick={addReward}
-            className="mt-2 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+            className="mt-4 inline-flex items-center px-4 py-3 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-all duration-200 hover:border-purple-300 hover:shadow-sm"
           >
             <Plus className="w-4 h-4 mr-2" />
             Add Reward
@@ -442,12 +534,15 @@ export default function CreateMissionPage() {
         </div>
 
         {/* Courses */}
-        <div className="bg-white rounded-lg border p-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-6">Courses</h2>
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-8">
+          <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
+            <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
+            Courses
+          </h2>
           
           {formData.courses.map((course, index) => (
-            <div key={index} className="border rounded-lg p-4 mb-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div key={index} className="border border-gray-200 rounded-xl p-6 mb-6 bg-gray-50">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Course Offering *
@@ -455,7 +550,7 @@ export default function CreateMissionPage() {
                   <select
                     value={course.courseOfferingId}
                     onChange={(e) => handleCourseChange(index, 'courseOfferingId', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 hover:border-gray-400"
                     required
                   >
                     <option value="">Select course offering</option>
@@ -475,7 +570,7 @@ export default function CreateMissionPage() {
                     type="number"
                     value={course.weight}
                     onChange={(e) => handleCourseChange(index, 'weight', e.target.value ? parseFloat(e.target.value) || 0 : 0)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 hover:border-gray-400"
                     min="0"
                     max="100"
                     step="0.1"
@@ -491,7 +586,7 @@ export default function CreateMissionPage() {
                     type="number"
                     value={course.minProgress}
                     onChange={(e) => handleCourseChange(index, 'minProgress', e.target.value ? parseFloat(e.target.value) || 0 : 0)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 hover:border-gray-400"
                     min="0"
                     max="100"
                     step="0.1"
@@ -512,7 +607,7 @@ export default function CreateMissionPage() {
           <button
             type="button"
             onClick={addCourse}
-            className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+            className="inline-flex items-center px-4 py-3 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-all duration-200 hover:border-blue-300 hover:shadow-sm"
           >
             <Plus className="w-4 h-4 mr-2" />
             Add Course
@@ -531,17 +626,17 @@ export default function CreateMissionPage() {
         </div>
 
         {/* Submit Button */}
-        <div className="flex justify-end space-x-4">
+        <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
           <Link
             href="/dashboard/admin/missions"
-            className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+            className="px-6 py-3 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-all duration-200 hover:shadow-sm"
           >
             Cancel
           </Link>
           <button
             type="submit"
             disabled={loading}
-            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
+            className="inline-flex items-center px-8 py-3 border border-transparent text-sm font-medium rounded-lg shadow-sm text-white bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 transition-all duration-200 hover:shadow-lg transform hover:-translate-y-0.5"
           >
             {loading ? (
               <>

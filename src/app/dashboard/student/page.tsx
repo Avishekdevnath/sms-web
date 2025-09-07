@@ -102,7 +102,7 @@ export default function StudentDashboardPage() {
 
       // Check if profile is completed
       if (!userData.profileCompleted) {
-        router.push('/dashboard/student/profile/complete');
+        router.push('/profile-complete');
         return;
       }
 
@@ -186,7 +186,7 @@ export default function StudentDashboardPage() {
           <h2 className="mt-4 text-2xl font-bold text-gray-900">Profile Not Found</h2>
           <p className="mt-2 text-gray-600">Please complete your profile first.</p>
           <button
-            onClick={() => router.push('/dashboard/student/profile/complete')}
+            onClick={() => router.push('/profile-complete')}
             className="mt-4 px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800"
           >
             Complete Profile

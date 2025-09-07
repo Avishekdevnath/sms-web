@@ -289,8 +289,12 @@ export default function SemestersPage() {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{semester.batchId.title}</div>
-                      <div className="text-sm text-gray-500">{semester.batchId.code}</div>
+                      <div className="text-sm text-gray-900">
+                        {semester.batchId?.title || 'Unknown Batch'}
+                      </div>
+                      <div className="text-sm text-gray-500">
+                        {semester.batchId?.code || 'Unknown Code'}
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${status.color}`}>

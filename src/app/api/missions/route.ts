@@ -1,108 +1,106 @@
-import { NextRequest, NextResponse } from "next/server";
-import { connectToDatabase } from "@/lib/mongodb";
-import { Mission } from "@/models/Mission";
-import { User } from "@/models/User"; // Import User model to register schema
-import { Batch } from "@/models/Batch"; // Import Batch model to register schema
-import { CourseOffering } from "@/models/CourseOffering"; // Import CourseOffering model to register schema
-import { getAuthUserFromRequest, requireRoles } from "@/lib/rbac";
-import { MissionCreateSchema, MissionUpdateSchema, MissionQuerySchema } from "@/schemas/mission";
-import { MissionQueryParams, MissionWithDetails } from "@/types/models";
-import { PaginatedResponse } from "@/types/api";
-
-// Function to generate unique mission code
-async function generateMissionCode(): Promise<string> {
-  const prefix = 'MISSION';
-  let counter = 1;
-  let code: string;
-  
-  do {
-    code = `${prefix}-${counter.toString().padStart(3, '0')}`;
-    const existingMission = await Mission.findOne({ code });
-    if (!existingMission) {
-      return code;
-    }
-    counter++;
-  } while (counter < 1000); // Safety limit
-  
-  throw new Error('Unable to generate unique mission code');
-}
-import { 
-  createSuccessResponse, 
-  createPaginatedResponse, 
-  createErrorResponse, 
-  createValidationErrorResponse,
-  handleApiError,
-  parseQueryParams,
-  getPaginationFromQuery,
-  buildSearchFilter,
-  calculatePagination,
-  transformMongoResponse
-} from "@/utils/apiHelpers";
-import { 
-  safeExtractBatchId, 
-  safeExtractBatchCode, 
-  safeExtractUserName 
-} from "@/utils/typeGuards";
+import { NextRequest, NextResponse } from 'next/server';
+import { connectToDatabase } from '@/lib/mongodb';
+import { getAuthUserFromRequest } from '@/lib/rbac';
+import { Mission } from '@/models/Mission';
+import { StudentMission } from '@/models/StudentMission';
+import { createSuccessResponse, createErrorResponse, handleApiError } from '@/utils/apiHelpers';
 
 export async function GET(req: NextRequest) {
   try {
     await connectToDatabase();
-    const { searchParams } = new URL(req.url);
-    
-    // Parse and validate query parameters
-    const queryParams = parseQueryParams<MissionQueryParams>(searchParams);
-    const validatedQuery = MissionQuerySchema.parse(queryParams);
-    
-    const { page = 1, limit = 20, batchId, status, createdBy, search, sortBy = 'createdAt', sortOrder = 'desc' } = validatedQuery;
-    const { skip } = getPaginationFromQuery(searchParams);
-    
-    // Build filter
-    const filter: any = {};
-    if (batchId) filter.batchId = batchId;
-    if (status) filter.status = status;
-    if (createdBy) filter.createdBy = createdBy;
-    if (search) {
-      Object.assign(filter, buildSearchFilter(search, ['title', 'description']));
+
+    const me = await getAuthUserFromRequest(req);
+    if (!me) {
+      return createErrorResponse('Unauthorized', 401);
     }
+
+    // Get query parameters
+    const { searchParams } = new URL(req.url);
+    const page = parseInt(searchParams.get('page') || '1');
+    const limit = parseInt(searchParams.get('limit') || '25');
+    const status = searchParams.get('status');
+    const search = searchParams.get('search');
+
+    // Build query
+    let query: any = {};
     
-    // Build sort
-    const sort: any = {};
-    sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
-    
-    // Execute query
-    const [missions, total] = await Promise.all([
-      Mission.find(filter)
-        .populate('createdBy', 'name email')
-        .populate('batchId', 'code title')
-        .populate({
-          path: 'courses.courseOfferingId',
-          populate: {
-            path: 'courseId',
-            select: 'title code'
-          }
-        })
-        .populate('students.studentId', 'name email')
-        .populate('students.mentorId', 'name email')
-        .sort(sort)
-        .skip(skip)
-        .limit(limit)
-        .lean(),
-      Mission.countDocuments(filter)
-    ]);
-    
-    // Transform response
-    const transformedMissions = missions.map(mission => transformMongoResponse(mission)) as MissionWithDetails[];
-    const pagination = calculatePagination(page, limit, total);
-    
-    // Return in the format expected by the frontend
+    if (status && status !== 'all') {
+      query.status = status;
+    }
+
+    if (search) {
+      query.$or = [
+        { code: { $regex: search, $options: 'i' } },
+        { title: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    // Calculate skip value for pagination
+    const skip = (page - 1) * limit;
+
+    // Fetch missions with pagination
+    const missions = await Mission.find(query)
+      .populate('batchId', 'code title')
+      .populate('courses.courseOfferingId.courseId', 'code title')
+      .populate('createdBy', 'name email')
+      .select('code title description status startDate endDate maxStudents courses requirements rewards createdAt')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    // Get total count for pagination
+    const totalMissions = await Mission.countDocuments(query);
+
+    // Get student counts for each mission
+    const missionsWithStudentCounts = await Promise.all(
+      missions.map(async (mission) => {
+        const studentCount = await StudentMission.countDocuments({
+          missionId: mission._id,
+          status: { $ne: 'dropped' }
+        });
+
+        return {
+          ...mission,
+          students: [],
+          studentCount: studentCount
+        };
+      })
+    );
+
+    // Transform data for frontend
+    const transformedMissions = missionsWithStudentCounts.map(mission => ({
+      _id: mission._id,
+      code: mission.code || 'N/A',
+      title: mission.title || 'Untitled',
+      description: mission.description || '',
+      status: mission.status || 'draft',
+      startDate: mission.startDate,
+      endDate: mission.endDate,
+      maxStudents: mission.maxStudents || 0,
+      students: [],
+      studentCount: mission.studentCount || 0,
+      courses: mission.courses || [],
+      requirements: mission.requirements || [],
+      rewards: mission.rewards || [],
+      createdAt: mission.createdAt,
+      batch: mission.batchId ? {
+        code: mission.batchId.code || 'N/A',
+        title: mission.batchId.title || 'Untitled'
+      } : null
+    }));
+
     return NextResponse.json({
       missions: transformedMissions,
-      total,
+      total: totalMissions,
       page,
       limit,
-      totalPages: pagination.totalPages
+      pages: Math.ceil(totalMissions / limit)
     });
+
   } catch (error) {
+    console.error('Error in missions API:', error);
     return handleApiError(error);
   }
 }
@@ -110,98 +108,43 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     await connectToDatabase();
-    
-    const me = await getAuthUserFromRequest(req);
-    requireRoles(me, ["admin", "manager", "sre"]);
-    
-    const body = await req.json();
-    
-    const validatedData = MissionCreateSchema.parse(body);
-    
-    // Generate unique mission code
-    const missionCode = await generateMissionCode();
-    
-    const missionData = {
-      ...validatedData,
-      code: missionCode,
-      startDate: validatedData.startDate && validatedData.startDate.trim() !== "" ? new Date(validatedData.startDate) : undefined,
-      endDate: validatedData.endDate && validatedData.endDate.trim() !== "" ? new Date(validatedData.endDate) : undefined,
-      createdBy: me!._id,
-    };
-    
-    const mission = await Mission.create(missionData);
-    
-    // Return the created mission without population to avoid schema issues
-    const transformedMission = transformMongoResponse(mission.toObject());
-    
-    return createSuccessResponse(transformedMission, "Mission created successfully");
-  } catch (error) {
-    console.error('POST /api/missions - Error:', error);
-    return handleApiError(error);
-  }
-}
 
-export async function PATCH(req: NextRequest) {
-  try {
-    await connectToDatabase();
     const me = await getAuthUserFromRequest(req);
-    requireRoles(me, ["admin", "manager", "sre"]);
-    
-    const { searchParams } = new URL(req.url);
-    const id = searchParams.get("id");
-    if (!id) {
-      return createErrorResponse("Mission ID required", 400);
+    if (!me) {
+      return createErrorResponse('Unauthorized', 401);
     }
-    
+
+    // Only admins and SREs can create missions
+    if (!['admin', 'sre'].includes(me.role)) {
+      return createErrorResponse('Insufficient permissions', 403);
+    }
+
     const body = await req.json();
-    const validatedData = MissionUpdateSchema.parse(body);
     
-    const updates: any = { ...validatedData };
-    if (validatedData.startDate && validatedData.startDate.trim() !== "") updates.startDate = new Date(validatedData.startDate);
-    if (validatedData.endDate && validatedData.endDate.trim() !== "") updates.endDate = new Date(validatedData.endDate);
-    
-    const mission = await Mission.findByIdAndUpdate(id, updates, { new: true })
-      .populate('createdBy', 'name email')
+    // Create new mission
+    const mission = new Mission({
+      ...body,
+      createdBy: me._id,
+      students: [],
+      status: body.status || 'draft'
+    });
+
+    await mission.save();
+
+    // Populate the created mission for response
+    const populatedMission = await Mission.findById(mission._id)
       .populate('batchId', 'code title')
-      .populate('courses.courseOfferingId', 'courseId batchId semesterId')
-      .populate('students.studentId', 'name email')
-      .populate('students.mentorId', 'name email')
-      .lean();
-    
-    if (!mission) {
-      return createErrorResponse("Mission not found", 404);
-    }
-    
-    const transformedMission = transformMongoResponse(mission) as MissionWithDetails;
-    
-    return createSuccessResponse(transformedMission, "Mission updated successfully");
+      .populate('courses.courseOfferingId.courseId', 'code title')
+      .populate('createdBy', 'name email');
+
+    return NextResponse.json({
+      success: true,
+      message: 'Mission created successfully',
+      mission: populatedMission
+    });
+
   } catch (error) {
+    console.error('Error creating mission:', error);
     return handleApiError(error);
   }
 }
-
-export async function DELETE(req: NextRequest) {
-  try {
-    await connectToDatabase();
-    const me = await getAuthUserFromRequest(req);
-    requireRoles(me, ["admin", "manager", "sre"]);
-    
-    const { searchParams } = new URL(req.url);
-    const id = searchParams.get("id");
-    
-    if (!id) {
-      return createErrorResponse("Mission ID required", 400);
-    }
-    
-    const mission = await Mission.findByIdAndDelete(id);
-    
-    if (!mission) {
-      return createErrorResponse("Mission not found", 404);
-    }
-    
-    return createSuccessResponse(null, "Mission deleted successfully");
-  } catch (error) {
-    console.error('DELETE /api/missions - Error:', error);
-    return handleApiError(error);
-  }
-} 

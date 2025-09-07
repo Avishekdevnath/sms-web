@@ -14,7 +14,7 @@ interface Batch {
 }
 
 interface BatchListResponse {
-  data: Batch[];
+  batches: Batch[];
   total: number;
   page: number;
   limit: number;
@@ -22,7 +22,7 @@ interface BatchListResponse {
 }
 
 export default function BatchesPage() {
-  const [batches, setBatches] = useState<Batch[]>([]);
+  const [batches, setBatches] = useState<Batch[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -46,11 +46,18 @@ export default function BatchesPage() {
       const response = await fetch(`/api/batches?${params}`);
       const data: BatchListResponse = await response.json();
 
-      setBatches(data.data);
+      console.log('Batches API response:', data);
+      console.log('Batches data:', data.batches);
+      console.log('Total batches:', data.total);
+
+      setBatches(data.batches || []);
       setTotalPages(data.totalPages);
       setTotalBatches(data.total);
     } catch (error) {
       console.error("Error fetching batches:", error);
+      setBatches(null);
+      setTotalPages(1);
+      setTotalBatches(0);
     } finally {
       setLoading(false);
     }
@@ -68,7 +75,7 @@ export default function BatchesPage() {
       });
 
       if (response.ok) {
-        setBatches(batches.filter(batch => batch._id !== batchId));
+        setBatches(batches?.filter(batch => batch._id !== batchId) || null);
         setTotalBatches(prev => prev - 1);
       } else {
         const error = await response.json();
@@ -90,7 +97,18 @@ export default function BatchesPage() {
     });
   };
 
-  if (loading && batches.length === 0) {
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-black mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading batches...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!batches) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
@@ -141,7 +159,7 @@ export default function BatchesPage() {
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-500">Active Batches</p>
-              <p className="text-2xl font-bold text-black">{batches.length}</p>
+              <p className="text-2xl font-bold text-black">{batches?.length || 0}</p>
             </div>
           </div>
         </div>
@@ -154,7 +172,7 @@ export default function BatchesPage() {
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-500">Total Students</p>
               <p className="text-2xl font-bold text-black">
-                {batches.reduce((sum, batch) => sum + (batch.studentCount || 0), 0)}
+                {batches?.reduce((sum, batch) => sum + (batch.studentCount || 0), 0) || 0}
               </p>
             </div>
           </div>
@@ -204,7 +222,7 @@ export default function BatchesPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {batches.map((batch) => (
+              {batches?.map((batch) => (
                 <tr key={batch._id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
@@ -251,7 +269,7 @@ export default function BatchesPage() {
         </div>
 
         {/* Empty State */}
-        {batches.length === 0 && !loading && (
+                    {(!batches || batches.length === 0) && !loading && (
           <div className="text-center py-12">
             <Users className="mx-auto h-12 w-12 text-gray-400" />
             <h3 className="mt-2 text-sm font-medium text-gray-900">No batches found</h3>

@@ -1,6 +1,7 @@
 'use client';
 
-import React from 'react';
+import { useState, useEffect } from 'react';
+import { AlertTriangle, X } from 'lucide-react';
 
 interface ConfirmationModalProps {
   isOpen: boolean;
@@ -11,9 +12,8 @@ interface ConfirmationModalProps {
   confirmText?: string;
   cancelText?: string;
   type?: 'danger' | 'warning' | 'info';
-  isLoading?: boolean;
   requireTyping?: boolean;
-  typingTarget?: string;
+  typingConfirmation?: string;
 }
 
 export default function ConfirmationModal({
@@ -25,154 +25,136 @@ export default function ConfirmationModal({
   confirmText = 'Confirm',
   cancelText = 'Cancel',
   type = 'danger',
-  isLoading = false,
   requireTyping = false,
-  typingTarget = ''
+  typingConfirmation = 'DELETE'
 }: ConfirmationModalProps) {
-  if (!isOpen) return null;
+  const [typingValue, setTypingValue] = useState('');
+  const [isTyping, setIsTyping] = useState(false);
+
+  // Reset typing state when modal opens/closes
+  useEffect(() => {
+    if (isOpen) {
+      setTypingValue('');
+      setIsTyping(false);
+    }
+  }, [isOpen]);
+
+  const handleConfirm = () => {
+    if (requireTyping && typingValue !== typingConfirmation) {
+      setIsTyping(true);
+      return;
+    }
+    
+    onConfirm();
+    onClose();
+  };
 
   const getTypeStyles = () => {
     switch (type) {
       case 'danger':
         return {
-          icon: '⚠️',
-          confirmButton: 'bg-red-600 hover:bg-red-700 focus:ring-red-500',
-          border: 'border-red-200'
+          icon: 'text-red-600',
+          button: 'bg-red-600 hover:bg-red-700 focus:ring-red-500',
+          iconBg: 'bg-red-100'
         };
       case 'warning':
         return {
-          icon: '⚠️',
-          confirmButton: 'bg-yellow-600 hover:bg-yellow-700 focus:ring-yellow-500',
-          border: 'border-yellow-200'
+          icon: 'text-yellow-600',
+          button: 'bg-yellow-600 hover:bg-yellow-700 focus:ring-yellow-500',
+          iconBg: 'bg-yellow-100'
         };
       case 'info':
         return {
-          icon: 'ℹ️',
-          confirmButton: 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500',
-          border: 'border-blue-200'
+          icon: 'text-blue-600',
+          button: 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500',
+          iconBg: 'bg-blue-100'
         };
       default:
         return {
-          icon: '⚠️',
-          confirmButton: 'bg-red-600 hover:bg-red-700 focus:ring-red-500',
-          border: 'border-red-200'
+          icon: 'text-red-600',
+          button: 'bg-red-600 hover:bg-red-700 focus:ring-red-500',
+          iconBg: 'bg-red-100'
         };
     }
   };
 
-  const styles = getTypeStyles();
-  const [typedText, setTypedText] = React.useState('');
-  const [typingError, setTypingError] = React.useState('');
+  const typeStyles = getTypeStyles();
 
-  const handleConfirm = () => {
-    if (!isLoading) {
-      if (requireTyping && typedText !== typingTarget) {
-        setTypingError('Please type the exact name to confirm deletion');
-        return;
-      }
-      if (requireTyping && !typingTarget) {
-        setTypingError('Confirmation target is missing. Please try again.');
-        return;
-      }
-      onConfirm();
-    }
-  };
-
-  const handleClose = () => {
-    if (!isLoading) {
-      setTypedText('');
-      setTypingError('');
-      onClose();
-    }
-  };
-
-  const handleTypingChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setTypedText(value);
-    if (typingError && value === typingTarget) {
-      setTypingError('');
-    }
-  };
-
-  const isConfirmDisabled = isLoading || (requireTyping && typedText !== typingTarget);
-
-  // Reset typing state when modal opens/closes
-  React.useEffect(() => {
-    if (isOpen) {
-      setTypedText('');
-      setTypingError('');
-    }
-  }, [isOpen]);
+  if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
-      <div className="flex min-h-screen items-center justify-center p-4">
-        {/* Backdrop */}
-        <div 
-          className="fixed inset-0 bg-black/20 backdrop-blur-sm transition-opacity"
-          onClick={handleClose}
-        />
+    <div className="modal-backdrop-focus">
+      {/* Backdrop */}
+      <div 
+        className="absolute inset-0 bg-gray-900/20 backdrop-blur-sm"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      
+      {/* Modal */}
+      <div className="relative bg-white rounded-lg shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+        {/* Header */}
+        <div className="flex items-center justify-between p-6 border-b border-gray-200">
+          <div className="flex items-center space-x-3">
+            <div className={`p-2 rounded-lg ${typeStyles.iconBg}`}>
+              <AlertTriangle className={`h-5 w-5 ${typeStyles.icon}`} />
+            </div>
+            <h2 className="text-lg font-semibold text-gray-900">
+              {title}
+            </h2>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-full hover:bg-gray-100"
+            aria-label="Close modal"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
         
-        {/* Modal */}
-        <div className={`relative w-full max-w-md transform rounded-lg bg-white p-6 shadow-xl transition-all ${styles.border} border-2 animate-slideIn`}>
-          {/* Header */}
-          <div className="flex items-center space-x-3 mb-4">
-            <div className="text-2xl">{styles.icon}</div>
-            <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
-          </div>
-          
-          {/* Content */}
-          <div className="mb-6">
-            <p className="text-sm text-gray-600 leading-relaxed">{message}</p>
-            
-            {requireTyping && (
-              <div className="mt-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Type <span className="font-mono text-red-600">"{typingTarget}"</span> to confirm:
-                </label>
-                <input
-                  type="text"
-                  value={typedText}
-                  onChange={handleTypingChange}
-                  className={`w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-offset-2 ${
-                    typingError 
-                      ? 'border-red-300 focus:ring-red-500 focus:border-red-500' 
-                      : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
-                  }`}
-                  placeholder="Enter the exact name..."
-                  disabled={isLoading}
-                />
-                {typingError && (
-                  <p className="mt-1 text-sm text-red-600">{typingError}</p>
-                )}
-              </div>
-            )}
-          </div>
-          
+        {/* Content */}
+        <div className="p-6">
+          <p className="text-gray-600 mb-6">
+            {message}
+          </p>
+
+          {requireTyping && (
+            <div className="mb-6">
+              <label htmlFor="typing-confirmation" className="block text-sm font-medium text-gray-700 mb-2">
+                Type <span className="font-mono font-bold text-red-600">{typingConfirmation}</span> to confirm:
+              </label>
+              <input
+                type="text"
+                id="typing-confirmation"
+                value={typingValue}
+                onChange={(e) => setTypingValue(e.target.value)}
+                className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                  isTyping && typingValue !== typingConfirmation ? 'border-red-500' : 'border-gray-300'
+                }`}
+                placeholder={typingConfirmation}
+              />
+              {isTyping && typingValue !== typingConfirmation && (
+                <p className="mt-1 text-sm text-red-600">
+                  Please type exactly "{typingConfirmation}" to confirm
+                </p>
+              )}
+            </div>
+          )}
+
           {/* Actions */}
-          <div className="flex justify-end space-x-3">
+          <div className="flex items-center justify-end space-x-3 pt-4 border-t">
             <button
-              type="button"
-              onClick={handleClose}
-              disabled={isLoading}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={onClose}
+              className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:border-gray-400 hover:bg-gray-50 transition-colors"
             >
               {cancelText}
             </button>
             <button
-              type="button"
               onClick={handleConfirm}
-              disabled={isConfirmDisabled}
-              className={`px-4 py-2 text-sm font-medium text-white rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 ${styles.confirmButton} disabled:opacity-50 disabled:cursor-not-allowed`}
+              disabled={requireTyping && typingValue !== typingConfirmation}
+              className={`px-4 py-2 text-white rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors ${typeStyles.button}`}
             >
-              {isLoading ? (
-                <div className="flex items-center space-x-2">
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  <span>Processing...</span>
-                </div>
-              ) : (
-                confirmText
-              )}
+              {confirmText}
             </button>
           </div>
         </div>

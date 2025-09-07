@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { User } from "@/models/User";
 import { StudentBatchMembership } from "@/models/StudentBatchMembership";
+import { StudentMission } from "@/models/StudentMission"; // Add import for StudentMission
 import { getAuthUserFromRequest, requireRoles } from "@/lib/rbac";
 
 export async function GET(req: NextRequest) {
@@ -14,6 +15,7 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
     const batchId = searchParams.get("batchId");
+    const excludeMissionId = searchParams.get("excludeMissionId"); // New parameter to exclude students from a specific mission
 
     if (!batchId) {
       return Response.json({ 
@@ -31,7 +33,7 @@ export async function GET(req: NextRequest) {
     }).populate('studentId', 'name email isActive profileCompleted role').lean();
 
     // Extract student data from memberships
-    const students = memberships
+    let students = memberships
       .map(membership => {
         const user = membership.studentId as any;
         if (!user || user.role !== 'student') return null;
@@ -46,6 +48,24 @@ export async function GET(req: NextRequest) {
         };
       })
       .filter(Boolean); // Remove null entries
+
+    // If excludeMissionId is provided, filter out students already in that mission
+    if (excludeMissionId) {
+      const existingStudentMissions = await StudentMission.find({
+        missionId: excludeMissionId,
+        studentId: { $in: students.map(s => s._id) },
+        status: { $ne: 'dropped' }
+      }).lean();
+      
+      const existingStudentIds = existingStudentMissions.map(sm => sm.studentId.toString());
+      console.log('Excluding students already in mission:', {
+        missionId: excludeMissionId,
+        existingStudentIds,
+        totalStudents: students.length
+      });
+      students = students.filter(student => !existingStudentIds.includes(student._id));
+      console.log('Students after filtering:', students.length);
+    }
 
     return Response.json({ 
       success: true,

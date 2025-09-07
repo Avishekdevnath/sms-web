@@ -4,7 +4,7 @@ export async function POST(req: NextRequest) {
   try {
     // Clear the token cookie
     const headers = new Headers();
-    headers.append("Set-Cookie", "token=; HttpOnly; Path=/; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT");
+    headers.append("Set-Cookie", "token=; Path=/; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT");
     
     return new Response(JSON.stringify({ message: "Logged out successfully" }), {
       status: 200,

@@ -1,14 +1,17 @@
 "use client";
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import PageTitle from "@/components/shared/PageTitle";
 import { PAGE_TITLES } from "@/utils/titleUtils";
 import { useAuth } from "@/context/AuthContext";
+import PasswordInput from "@/components/shared/PasswordInput";
 
-export default function LoginPage() {
-  const [email, setEmail] = useState("");
+// Separate component for search params to use Suspense
+function LoginForm() {
+  const [loginIdentifier, setLoginIdentifier] = useState("");
   const [password, setPassword] = useState("");
+  const [loginMethod, setLoginMethod] = useState<"email" | "username" | "phone">("email");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -25,7 +28,11 @@ export default function LoginPage() {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ 
+          loginIdentifier, 
+          loginMethod, 
+          password 
+        }),
       });
       
       const data = await res.json();
@@ -38,9 +45,12 @@ export default function LoginPage() {
       login(data.user);
       
       // Check if user has a temporary password and redirect accordingly
-      if (data.user.passwordExpiresAt) {
-        // User has temporary password, redirect to reset password page
-        router.push('/reset-password');
+      if (data.user.passwordExpiresAt || data.user.mustChangePassword) {
+        // User has temporary password or must change password, redirect to change password page
+        router.push('/change-password');
+      } else if (data.user.role === 'student' && !data.user.profileCompleted) {
+        // Student with incomplete profile, redirect to standalone profile completion page
+        router.push('/profile-complete');
       } else {
         // Normal login, redirect to the intended page or dashboard
         router.push(redirectTo);
@@ -72,16 +82,40 @@ export default function LoginPage() {
             
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Email Address
+                Login Method
               </label>
-              <input 
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                type="email" 
-                value={email} 
-                onChange={e => setEmail(e.target.value)} 
-                required 
-                disabled={loading}
-                placeholder="Enter your email"
+              <div className="flex space-x-2 mb-2">
+                {[
+                  { value: "email", label: "Email", placeholder: "Enter your email" },
+                  { value: "username", label: "Username", placeholder: "Enter your username" },
+                  { value: "phone", label: "Phone", placeholder: "Enter your phone number" }
+                ].map((method) => (
+                  <button
+                    key={method.value}
+                    type="button"
+                    onClick={() => setLoginMethod(method.value as "email" | "username" | "phone")}
+                    className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                      loginMethod === method.value
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                  >
+                    {method.label}
+                  </button>
+                ))}
+              </div>
+              
+              <input
+                type={loginMethod === "email" ? "email" : "text"}
+                value={loginIdentifier}
+                onChange={(e) => setLoginIdentifier(e.target.value)}
+                placeholder={
+                  loginMethod === "email" ? "Enter your email" :
+                  loginMethod === "username" ? "Enter your username" :
+                  "Enter your phone number"
+                }
+                required
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
             
@@ -89,51 +123,46 @@ export default function LoginPage() {
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Password
               </label>
-              <input 
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                type="password" 
-                value={password} 
-                onChange={e => setPassword(e.target.value)} 
-                required 
-                disabled={loading}
-                placeholder="Enter your password"
+              <PasswordInput
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
-              <div className="mt-2 text-right">
-                <Link 
-                  href="/forgot-password" 
-                  className="text-sm text-blue-600 hover:text-blue-500"
-                >
-                  Forgot your password?
-                </Link>
-              </div>
             </div>
             
-            <button 
-              disabled={loading} 
-              className="w-full bg-blue-600 text-white rounded-md py-2 px-4 font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              {loading ? (
-                <span className="flex items-center justify-center">
-                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Signing in...
-                </span>
-              ) : (
-                "Sign In"
-              )}
+              {loading ? "Signing in..." : "Sign In"}
             </button>
           </form>
           
           <div className="mt-6 text-center">
-            <p className="text-sm text-gray-600">
-              Demo accounts available: admin@example.com, dev@example.com, student@example.com
-            </p>
-            <p className="text-sm text-gray-500 mt-1">Password: password123</p>
+            <Link href="/forgot-password" className="text-blue-600 hover:text-blue-500 text-sm">
+              Forgot your password?
+            </Link>
+          </div>
+          
+          <div className="mt-4 text-center">
+            <span className="text-gray-600 text-sm">Don't have an account? </span>
+            <Link href="/invitation" className="text-blue-600 hover:text-blue-500 text-sm">
+              Get invited
+            </Link>
           </div>
         </div>
       </div>
     </div>
+  );
+}
+
+// Main component with Suspense boundary
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <LoginForm />
+    </Suspense>
   );
 } 

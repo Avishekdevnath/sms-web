@@ -2,6 +2,14 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
+import { MissionProvider } from "@/context/MissionContext";
+
+// Force dynamic rendering for all routes
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+export const fetchCache = 'force-no-store';
+export const runtime = 'nodejs';
+export const preferredRegion = 'auto';
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -19,7 +27,9 @@ export default function RootLayout({
     <html lang="en">
       <body className={inter.className} suppressHydrationWarning={true}>
         <AuthProvider>
-          {children}
+          <MissionProvider>
+            {children}
+          </MissionProvider>
         </AuthProvider>
       </body>
     </html>

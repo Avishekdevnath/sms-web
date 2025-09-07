@@ -1,4 +1,4 @@
-import { IUser, IBatch, IMission, ICourseOffering, IAssignment, ISemester } from '@/models';
+import { IUser, IBatch, IMission, ICourseOffering, IAssignment, ISemester, IGroup } from '@/models';
 
 // Extended model interfaces for API responses
 export interface UserWithBatches extends IUser {
@@ -8,6 +8,8 @@ export interface UserWithBatches extends IUser {
 }
 
 export interface MissionWithDetails extends IMission {
+  // The IMission interface already has these fields, so we don't need to redefine them
+  // Just ensure proper typing for populated fields
   createdBy: IUser;
   batchId: IBatch;
   courses: Array<{
@@ -16,14 +18,13 @@ export interface MissionWithDetails extends IMission {
     requiredAssignments?: IAssignment[];
     minProgress?: number;
   }>;
-  students: Array<{
-    studentId: IUser;
-    mentorId?: IUser;
-    status: string;
-    progress: number;
-    startedAt: Date;
-    completedAt?: Date;
+  // REMOVED: students array - now using StudentMission collection
+  mentors: Array<{
+    mentorId: IUser;
+    role: 'primary' | 'secondary' | 'moderator';
+    specialization: string[];
   }>;
+  mentorshipGroups: IGroup[];
 }
 
 export interface PopulatedBatch extends IBatch {
@@ -86,6 +87,21 @@ export interface AssignmentWithDetails extends IAssignment {
     fileUrl?: string;
     grade?: number;
     feedback?: string;
+  }>;
+}
+
+// Group-related interfaces
+export interface GroupWithDetails extends IGroup {
+  mission: IMission;
+  mentors: Array<{
+    mentorId: IUser;
+    role: 'primary' | 'secondary' | 'moderator';
+    assignedAt: Date;
+  }>;
+  students: Array<{
+    studentId: IUser;
+    assignedAt: Date;
+    status: 'active' | 'inactive';
   }>;
 }
 

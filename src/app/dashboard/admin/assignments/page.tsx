@@ -2,14 +2,27 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Plus, Search, Edit, Trash2, Calendar, BookOpen, Filter, Eye, Download } from "lucide-react";
+import { Plus, Search, Edit, Trash2, Calendar, BookOpen, Filter, Eye, Download, Mail, Users, CheckCircle } from "lucide-react";
 
 interface Assignment {
   _id: string;
   courseOfferingId: {
     _id: string;
-    title: string;
-    code: string;
+    courseId: {
+      _id: string;
+      title: string;
+      code: string;
+    };
+    batchId: {
+      _id: string;
+      title: string;
+      code: string;
+    };
+    semesterId: {
+      _id: string;
+      title: string;
+      number: number;
+    };
   };
   title: string;
   description?: string;
@@ -27,6 +40,8 @@ interface Assignment {
   }>;
   createdAt: string;
   updatedAt: string;
+  completionCount?: number;
+  totalSubmissions?: number;
 }
 
 interface AssignmentListResponse {
@@ -47,10 +62,41 @@ export default function AssignmentsPage() {
   const [deletingAssignment, setDeletingAssignment] = useState<string | null>(null);
   const [filterPublished, setFilterPublished] = useState<"all" | "published" | "unpublished">("all");
   const [filterCourse, setFilterCourse] = useState("");
+  const [filterBatch, setFilterBatch] = useState("");
+  const [filterSemester, setFilterSemester] = useState("");
+  const [batches, setBatches] = useState<Array<{_id: string, title: string, code: string}>>([]);
+  const [semesters, setSemesters] = useState<Array<{_id: string, title: string, number: number}>>([]);
+  const [courses, setCourses] = useState<Array<{_id: string, title: string, code: string}>>([]);
 
   useEffect(() => {
     fetchAssignments();
-  }, [currentPage, searchTerm, filterPublished, filterCourse]);
+  }, [currentPage, searchTerm, filterPublished, filterCourse, filterBatch, filterSemester]);
+
+  useEffect(() => {
+    fetchFilterData();
+  }, []);
+
+  const fetchFilterData = async () => {
+    try {
+      const [batchesRes, semestersRes, coursesRes] = await Promise.all([
+        fetch('/api/batches'),
+        fetch('/api/semesters'),
+        fetch('/api/courses')
+      ]);
+
+      const [batchesData, semestersData, coursesData] = await Promise.all([
+        batchesRes.json(),
+        semestersRes.json(),
+        coursesRes.json()
+      ]);
+
+      setBatches(batchesData.batches || []);
+      setSemesters(semestersData.data || semestersData.semesters || []);
+      setCourses(coursesData.courses || []);
+    } catch (error) {
+      console.error("Error fetching filter data:", error);
+    }
+  };
 
   const fetchAssignments = async () => {
     try {
@@ -60,7 +106,9 @@ export default function AssignmentsPage() {
         limit: "10",
         ...(searchTerm && { search: searchTerm }),
         ...(filterPublished !== "all" && { published: filterPublished === "published" ? "true" : "false" }),
-        ...(filterCourse && { courseOfferingId: filterCourse })
+        ...(filterCourse && { courseId: filterCourse }),
+        ...(filterBatch && { batchId: filterBatch }),
+        ...(filterSemester && { semesterId: filterSemester })
       });
 
       const response = await fetch(`/api/assignments?${params}`);
@@ -104,8 +152,12 @@ export default function AssignmentsPage() {
 
   const handlePublishAssignment = async (assignmentId: string) => {
     try {
-      const response = await fetch(`/api/assignments/publish?id=${assignmentId}`, {
-        method: "POST",
+      const response = await fetch(`/api/assignments/${assignmentId}/publish`, {
+        method: "PATCH",
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ published: true }),
       });
 
       if (response.ok) {
@@ -122,8 +174,12 @@ export default function AssignmentsPage() {
 
   const handleUnpublishAssignment = async (assignmentId: string) => {
     try {
-      const response = await fetch(`/api/assignments/unpublish?id=${assignmentId}`, {
-        method: "POST",
+      const response = await fetch(`/api/assignments/${assignmentId}/publish`, {
+        method: "PATCH",
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ published: false }),
       });
 
       if (response.ok) {
@@ -235,15 +291,12 @@ export default function AssignmentsPage() {
         <div className="border rounded-lg p-6 bg-white">
           <div className="flex items-center">
             <div className="p-2 bg-gray-100 rounded-lg">
-              <BookOpen className="h-6 w-6 text-gray-600" />
+              <Users className="h-6 w-6 text-gray-600" />
             </div>
             <div className="ml-4">
-              <p className="text-sm font-medium text-gray-500">Overdue</p>
+              <p className="text-sm font-medium text-gray-500">Total Completions</p>
               <p className="text-2xl font-bold text-black">
-                {assignments.filter(a => {
-                  const dueDate = a.dueAt ? new Date(a.dueAt) : null;
-                  return dueDate && new Date() > dueDate;
-                }).length}
+                {assignments.reduce((sum, a) => sum + (a.completionCount || 0), 0)}
               </p>
             </div>
           </div>
@@ -252,7 +305,7 @@ export default function AssignmentsPage() {
 
       {/* Search and Filters */}
       <div className="border rounded-lg p-6 bg-white">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
             <input
@@ -274,19 +327,52 @@ export default function AssignmentsPage() {
             <option value="unpublished">Draft</option>
           </select>
 
-          <input
-            type="text"
-            placeholder="Filter by course..."
+          <select
+            value={filterBatch}
+            onChange={(e) => setFilterBatch(e.target.value)}
+            className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-black"
+          >
+            <option value="">All Batches</option>
+            {batches.map((batch) => (
+              <option key={batch._id} value={batch._id}>
+                {batch.title}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={filterSemester}
+            onChange={(e) => setFilterSemester(e.target.value)}
+            className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-black"
+          >
+            <option value="">All Semesters</option>
+            {semesters.map((semester) => (
+              <option key={semester._id} value={semester._id}>
+                {semester.title}
+              </option>
+            ))}
+          </select>
+
+          <select
             value={filterCourse}
             onChange={(e) => setFilterCourse(e.target.value)}
             className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-black"
-          />
+          >
+            <option value="">All Courses</option>
+            {courses.map((course) => (
+              <option key={course._id} value={course._id}>
+                {course.title} ({course.code})
+              </option>
+            ))}
+          </select>
 
           <button
             onClick={() => {
               setSearchTerm("");
               setFilterPublished("all");
               setFilterCourse("");
+              setFilterBatch("");
+              setFilterSemester("");
             }}
             className="px-4 py-2 border border-gray-300 rounded-lg text-sm hover:border-black transition-colors"
           >
@@ -316,6 +402,9 @@ export default function AssignmentsPage() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Points
                 </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Completions
+                </th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
                 </th>
@@ -337,8 +426,10 @@ export default function AssignmentsPage() {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{assignment.courseOfferingId.title}</div>
-                      <div className="text-sm text-gray-500">{assignment.courseOfferingId.code}</div>
+                      <div className="text-sm text-gray-900">{assignment.courseOfferingId.courseId.title}</div>
+                      <div className="text-sm text-gray-500">
+                        {assignment.courseOfferingId.batchId.title} - {assignment.courseOfferingId.semesterId.title} - {assignment.courseOfferingId.courseId.code}
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${status.color}`}>
@@ -351,20 +442,37 @@ export default function AssignmentsPage() {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {assignment.maxPoints || 100}
                     </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <div className="flex items-center">
+                        <CheckCircle className="h-4 w-4 text-green-500 mr-1" />
+                        {assignment.completionCount || 0}
+                      </div>
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex items-center justify-end space-x-2">
                         <Link
                           href={`/dashboard/admin/assignments/${assignment._id}`}
                           className="text-gray-600 hover:text-black"
+                          title="View Details"
                         >
                           <Eye className="h-4 w-4" />
                         </Link>
                         <Link
                           href={`/dashboard/admin/assignments/${assignment._id}/edit`}
                           className="text-gray-600 hover:text-black"
+                          title="Edit Assignment"
                         >
                           <Edit className="h-4 w-4" />
                         </Link>
+                        {assignment.publishedAt && (
+                          <Link
+                            href={`/dashboard/admin/assignments/${assignment._id}/submit-emails`}
+                            className="text-gray-600 hover:text-blue-600"
+                            title="Submit Emails"
+                          >
+                            <Mail className="h-4 w-4" />
+                          </Link>
+                        )}
                         {assignment.publishedAt ? (
                           <button
                             onClick={() => handleUnpublishAssignment(assignment._id)}
@@ -386,6 +494,7 @@ export default function AssignmentsPage() {
                           onClick={() => handleDeleteAssignment(assignment._id)}
                           disabled={deletingAssignment === assignment._id}
                           className="text-gray-600 hover:text-red-600 disabled:opacity-50"
+                          title="Delete Assignment"
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>

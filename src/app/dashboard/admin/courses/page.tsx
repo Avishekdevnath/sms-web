@@ -67,9 +67,9 @@ export default function CoursesPage() {
       const response = await fetch(`/api/courses?${params}`);
       const data: CourseListResponse = await response.json();
 
-      setCourses(data.courses);
-      setTotalPages(data.totalPages);
-      setTotalCourses(data.total);
+      setCourses(data.courses || []);
+      setTotalPages(Math.max(1, data.totalPages || 1));
+      setTotalCourses(Math.max(0, data.total || 0));
     } catch (error) {
       console.error("Error fetching courses:", error);
     } finally {
@@ -99,8 +99,8 @@ export default function CoursesPage() {
       });
 
       if (response.ok) {
-        setCourses(courses.filter(course => course._id !== courseId));
-        setTotalCourses(prev => prev - 1);
+        setCourses(courses.filter(course => course._id && course._id !== courseId));
+        setTotalCourses(prev => Math.max(0, prev - 1));
       } else {
         const error = await response.json();
         alert(`Error deleting course: ${error.error?.message || 'Unknown error'}`);
@@ -114,12 +114,15 @@ export default function CoursesPage() {
   };
 
   const getCourseOfferingsCount = (courseId: string) => {
-    return courseOfferings.filter(offering => offering.courseId._id === courseId).length;
+    if (!courseOfferings || courseOfferings.length === 0 || !courseId) return 0;
+    const count = courseOfferings.filter(offering => offering.courseId?._id === courseId).length;
+    return isNaN(count) ? 0 : count;
   };
 
   const getActiveBatches = (courseId: string) => {
-    const offerings = courseOfferings.filter(offering => offering.courseId._id === courseId);
-    const uniqueBatches = new Set(offerings.map(offering => offering.batchId.title));
+    if (!courseOfferings || courseOfferings.length === 0 || !courseId) return [];
+    const offerings = courseOfferings.filter(offering => offering.courseId?._id === courseId);
+    const uniqueBatches = new Set(offerings.map(offering => offering.batchId?.title).filter(Boolean));
     return Array.from(uniqueBatches);
   };
 
@@ -131,7 +134,7 @@ export default function CoursesPage() {
     });
   };
 
-  if (loading && courses.length === 0) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
@@ -170,7 +173,7 @@ export default function CoursesPage() {
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-500">Total Courses</p>
-              <p className="text-2xl font-bold text-black">{totalCourses}</p>
+              <p className="text-2xl font-bold text-black">{totalCourses || 0}</p>
             </div>
           </div>
         </div>
@@ -182,7 +185,7 @@ export default function CoursesPage() {
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-500">Active Offerings</p>
-              <p className="text-2xl font-bold text-black">{courseOfferings.length}</p>
+              <p className="text-2xl font-bold text-black">{courseOfferings?.length || 0}</p>
             </div>
           </div>
         </div>
@@ -195,7 +198,13 @@ export default function CoursesPage() {
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-500">Active Batches</p>
               <p className="text-2xl font-bold text-black">
-                {new Set(courseOfferings.map(offering => offering.batchId._id)).size}
+                {(() => {
+                  if (!courseOfferings || courseOfferings.length === 0) return 0;
+                  const batchIds = courseOfferings
+                    .map(offering => offering.batchId?._id)
+                    .filter(id => id && id.toString && id.toString().length > 0);
+                  return new Set(batchIds).size;
+                })()}
               </p>
             </div>
           </div>
@@ -209,7 +218,13 @@ export default function CoursesPage() {
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-500">Active Semesters</p>
               <p className="text-2xl font-bold text-black">
-                {new Set(courseOfferings.map(offering => offering.semesterId._id)).size}
+                {(() => {
+                  if (!courseOfferings || courseOfferings.length === 0) return 0;
+                  const semesterIds = courseOfferings
+                    .map(offering => offering.semesterId?._id)
+                    .filter(id => id && id.toString && id.toString().length > 0);
+                  return new Set(semesterIds).size;
+                })()}
               </p>
             </div>
           </div>
@@ -247,8 +262,9 @@ export default function CoursesPage() {
       </div>
 
       {/* Courses Table */}
-      <div className="border rounded-lg bg-white overflow-hidden">
-        <div className="overflow-x-auto">
+      {courses && courses.length > 0 && (
+        <div className="border rounded-lg bg-white overflow-hidden">
+          <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50 border-b">
               <tr>
@@ -273,14 +289,15 @@ export default function CoursesPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {courses.map((course) => {
+              {courses && courses.length > 0 ? courses.map((course) => {
+                if (!course._id) return null; // Skip courses without ID
                 const offeringsCount = getCourseOfferingsCount(course._id);
                 const activeBatches = getActiveBatches(course._id);
                 return (
                   <tr key={course._id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div>
-                        <div className="text-sm font-medium text-gray-900">{course.title}</div>
+                        <div className="text-sm font-medium text-gray-900">{course.title || 'Untitled'}</div>
                         {course.description && (
                           <div className="text-sm text-gray-500 truncate max-w-xs">
                             {course.description}
@@ -290,11 +307,11 @@ export default function CoursesPage() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                        {course.code}
+                        {course.code || 'N/A'}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {offeringsCount} offering{offeringsCount !== 1 ? 's' : ''}
+                      {offeringsCount || 0} offering{(offeringsCount || 0) !== 1 ? 's' : ''}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">
@@ -317,7 +334,7 @@ export default function CoursesPage() {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {formatDate(course.createdAt)}
+                      {course.createdAt ? formatDate(course.createdAt) : 'N/A'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex items-center justify-end space-x-2">
@@ -334,7 +351,7 @@ export default function CoursesPage() {
                           <Edit className="h-4 w-4" />
                         </Link>
                         <button
-                          onClick={() => handleDeleteCourse(course._id)}
+                          onClick={() => course._id && handleDeleteCourse(course._id)}
                           disabled={deletingCourse === course._id}
                           className="text-gray-600 hover:text-red-600 disabled:opacity-50"
                         >
@@ -344,40 +361,42 @@ export default function CoursesPage() {
                     </td>
                   </tr>
                 );
-              })}
+              }) : null}
             </tbody>
           </table>
         </div>
 
-        {/* Empty State */}
-        {courses.length === 0 && !loading && (
-          <div className="text-center py-12">
-            <BookOpen className="mx-auto h-12 w-12 text-gray-400" />
-            <h3 className="mt-2 text-sm font-medium text-gray-900">No courses found</h3>
-            <p className="mt-1 text-sm text-gray-500">
-              {searchTerm ? "Try adjusting your search terms." : "Get started by creating a new course."}
-            </p>
-            {!searchTerm && (
-              <div className="mt-6">
-                <Link
-                  href="/dashboard/admin/courses/create"
-                  className="inline-flex items-center px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create Course
-                </Link>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+        </div>
+      )}
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between">
-          <div className="text-sm text-gray-700">
-            Showing {((currentPage - 1) * 10) + 1} to {Math.min(currentPage * 10, totalCourses)} of {totalCourses} results
-          </div>
+      {/* Empty State */}
+      {(!courses || courses.length === 0) && !loading && (
+        <div className="text-center py-12">
+          <BookOpen className="mx-auto h-12 w-12 text-gray-400" />
+          <h3 className="mt-2 text-sm font-medium text-gray-900">No courses found</h3>
+          <p className="mt-1 text-sm text-gray-500">
+            {searchTerm ? "Try adjusting your search terms." : "Get started by creating a new course."}
+          </p>
+          {!searchTerm && (
+            <div className="mt-6">
+              <Link
+                href="/dashboard/admin/courses/create"
+                className="inline-flex items-center px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Create Course
+              </Link>
+            </div>
+          )}
+        </div>
+      )}
+
+             {/* Pagination */}
+       {totalPages > 1 && courses && courses.length > 0 && (
+         <div className="flex items-center justify-between">
+           <div className="text-sm text-gray-700">
+             Showing {Math.max(1, ((currentPage - 1) * 10) + 1)} to {Math.min(currentPage * 10, totalCourses || 0)} of {totalCourses || 0} results
+           </div>
           <div className="flex space-x-2">
             <button
               onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}

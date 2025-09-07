@@ -1,4 +1,5 @@
 import { Mission, IMission } from '@/models/Mission';
+import { StudentMission } from '@/models/StudentMission';
 import { MissionCreateSchema, MissionUpdateSchema, MissionQuerySchema } from '@/schemas/mission';
 import { MissionWithDetails, MissionQueryParams } from '@/types/models';
 import { PaginatedResponse } from '@/types/api';
@@ -51,8 +52,6 @@ export class MissionService {
         .populate('createdBy', 'name email')
         .populate('batchId', 'code title')
         .populate('courses.courseOfferingId', 'courseId batchId semesterId')
-        .populate('students.studentId', 'name email')
-        .populate('students.mentorId', 'name email')
         .sort(sort)
         .skip(skip)
         .limit(limit)
@@ -80,8 +79,6 @@ export class MissionService {
       .populate('createdBy', 'name email')
       .populate('batchId', 'code title')
       .populate('courses.courseOfferingId', 'courseId batchId semesterId')
-      .populate('students.studentId', 'name email')
-      .populate('students.mentorId', 'name email')
       .lean();
     
     return mission as MissionWithDetails | null;
@@ -105,6 +102,10 @@ export class MissionService {
    * Delete mission
    */
   static async delete(id: string): Promise<boolean> {
+    // First, remove all StudentMission records for this mission
+    await StudentMission.deleteMany({ missionId: id });
+    
+    // Then delete the mission
     const result = await Mission.findByIdAndDelete(id);
     return !!result;
   }
@@ -116,24 +117,31 @@ export class MissionService {
     const mission = await Mission.findById(missionId);
     if (!mission) return false;
 
-    const studentsToAdd = studentIds.map(studentId => ({
+    // Check for existing students in this specific mission
+    const existingStudentMissions = await StudentMission.find({
+      missionId: missionId,
+      studentId: { $in: studentIds }
+    }).lean();
+
+    const existingStudentIds = existingStudentMissions.map(sm => sm.studentId.toString());
+    const newStudentIds = studentIds.filter(id => !existingStudentIds.includes(id));
+
+    if (newStudentIds.length === 0) return true; // All students already exist
+
+    // Create new StudentMission records for each student
+    const newStudentMissions = newStudentIds.map(studentId => ({
       studentId: new Types.ObjectId(studentId),
-      mentorId: mentorId ? new Types.ObjectId(mentorId) : undefined,
+      missionId: new Types.ObjectId(missionId),
+      batchId: mission.batchId,
+      mentorId: mentorId ? new Types.ObjectId(mentorId) : null,
       status: 'active',
       progress: 0,
       startedAt: new Date(),
+      lastActivity: new Date(),
       courseProgress: []
     }));
 
-    // Filter out students that are already in the mission
-    const existingStudentIds = mission.students.map(s => s.studentId.toString());
-    const newStudents = studentsToAdd.filter(s => !existingStudentIds.includes(s.studentId.toString()));
-
-    if (newStudents.length > 0) {
-      mission.students.push(...newStudents);
-      await mission.save();
-    }
-
+    await StudentMission.insertMany(newStudentMissions);
     return true;
   }
 
@@ -141,14 +149,21 @@ export class MissionService {
    * Remove students from mission
    */
   static async removeStudents(missionId: string, studentIds: string[]): Promise<boolean> {
-    const mission = await Mission.findById(missionId);
-    if (!mission) return false;
+    // Mark students as 'dropped' instead of deleting to maintain history
+    const result = await StudentMission.updateMany(
+      {
+        missionId: missionId,
+        studentId: { $in: studentIds }
+      },
+      {
+        $set: { 
+          status: 'dropped',
+          lastActivity: new Date()
+        }
+      }
+    );
 
-    const studentObjectIds = studentIds.map(id => new Types.ObjectId(id));
-    mission.students = mission.students.filter(s => !studentObjectIds.includes(s.studentId));
-    
-    await mission.save();
-    return true;
+    return result.modifiedCount > 0;
   }
 
   /**
@@ -194,8 +209,6 @@ export class MissionService {
       .populate('createdBy', 'name email')
       .populate('batchId', 'code title')
       .populate('courses.courseOfferingId', 'courseId batchId semesterId')
-      .populate('students.studentId', 'name email')
-      .populate('students.mentorId', 'name email')
       .sort({ createdAt: -1 })
       .lean();
 
@@ -213,8 +226,6 @@ export class MissionService {
       .populate('createdBy', 'name email')
       .populate('batchId', 'code title')
       .populate('courses.courseOfferingId', 'courseId batchId semesterId')
-      .populate('students.studentId', 'name email')
-      .populate('students.mentorId', 'name email')
       .sort({ createdAt: -1 })
       .lean();
 
@@ -225,28 +236,30 @@ export class MissionService {
    * Check if mission has active students
    */
   static async hasActiveStudents(missionId: string): Promise<boolean> {
-    const mission = await Mission.findById(missionId);
-    if (!mission) return false;
-
-    return mission.students.some(student => student.status === 'active');
+    const count = await StudentMission.countDocuments({
+      missionId: missionId,
+      status: 'active'
+    });
+    return count > 0;
   }
 
   /**
    * Get mission progress for a student
    */
   static async getStudentProgress(missionId: string, studentId: string): Promise<any> {
-    const mission = await Mission.findById(missionId);
-    if (!mission) return null;
+    const studentMission = await StudentMission.findOne({
+      missionId: missionId,
+      studentId: studentId
+    }).lean();
 
-    const student = mission.students.find(s => s.studentId.toString() === studentId);
-    if (!student) return null;
+    if (!studentMission) return null;
 
     return {
-      status: student.status,
-      progress: student.progress,
-      startedAt: student.startedAt,
-      completedAt: student.completedAt,
-      courseProgress: student.courseProgress
+      status: studentMission.status,
+      progress: studentMission.progress,
+      startedAt: studentMission.startedAt,
+      completedAt: studentMission.completedAt,
+      courseProgress: studentMission.courseProgress
     };
   }
 
@@ -254,19 +267,46 @@ export class MissionService {
    * Update student progress in mission
    */
   static async updateStudentProgress(missionId: string, studentId: string, progress: number, courseProgress?: any[]): Promise<boolean> {
-    const result = await Mission.updateOne(
+    const updates: any = { 
+      progress,
+      lastActivity: new Date()
+    };
+    
+    if (courseProgress) {
+      updates.courseProgress = courseProgress;
+    }
+
+    const result = await StudentMission.updateOne(
       { 
-        _id: missionId, 
-        'students.studentId': new Types.ObjectId(studentId) 
+        missionId: missionId, 
+        studentId: new Types.ObjectId(studentId) 
       },
-      { 
-        $set: { 
-          'students.$.progress': progress,
-          ...(courseProgress && { 'students.$.courseProgress': courseProgress })
-        } 
-      }
+      { $set: updates }
     );
 
     return result.modifiedCount > 0;
+  }
+
+  /**
+   * Get mission students count
+   */
+  static async getStudentCount(missionId: string): Promise<number> {
+    return await StudentMission.countDocuments({
+      missionId: missionId,
+      status: { $ne: 'dropped' }
+    });
+  }
+
+  /**
+   * Get mission students with details
+   */
+  static async getMissionStudents(missionId: string): Promise<any[]> {
+    return await StudentMission.find({
+      missionId: missionId,
+      status: { $ne: 'dropped' }
+    })
+    .populate('studentId', 'name email userId')
+    .populate('mentorId', 'name email')
+    .lean();
   }
 } 

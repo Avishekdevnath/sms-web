@@ -7,23 +7,36 @@ import { signUserToken } from "@/lib/auth";
 import type { IUser } from "@/models/User";
 
 const schema = z.object({ 
-  email: z.string().email("Please enter a valid email address"), 
+  loginIdentifier: z.string().min(1, "Login identifier is required"), 
+  loginMethod: z.enum(["email", "username", "phone"], { 
+    required_error: "Login method is required" 
+  }),
   password: z.string().min(6, "Password must be at least 6 characters") 
 });
 
 export async function POST(req: NextRequest) {
   try {
     const json = await req.json();
-    const { email, password } = schema.parse(json);
+    const { loginIdentifier, loginMethod, password } = schema.parse(json);
 
     await connectToDatabase();
     
-    // Find user and check if active
-    const user = (await User.findOne({ 
-      email: email.toLowerCase(),
+    // Build query based on login method
+    let query: any = {
       isActive: true,
       deletedAt: { $exists: false }
-    }).lean()) as unknown as IUser | null;
+    };
+
+    if (loginMethod === "email") {
+      query.email = loginIdentifier.toLowerCase();
+    } else if (loginMethod === "username") {
+      query.username = loginIdentifier;
+    } else if (loginMethod === "phone") {
+      query.phone = loginIdentifier;
+    }
+
+    // Find user and check if active
+    const user = (await User.findOne(query).lean()) as unknown as IUser | null;
     
     if (!user) {
       return Response.json({ 
@@ -79,7 +92,7 @@ export async function POST(req: NextRequest) {
     const expires = new Date();
     expires.setDate(expires.getDate() + 7);
     
-    headers.append("Set-Cookie", `token=${token}; HttpOnly; Path=/; Expires=${expires.toUTCString()}; Max-Age=604800${secureFlag}${sameSiteFlag}`);
+    headers.append("Set-Cookie", `token=${token}; Path=/; Expires=${expires.toUTCString()}; Max-Age=604800${secureFlag}${sameSiteFlag}`);
 
     // Return user data (without sensitive information)
     return new Response(JSON.stringify({ 

@@ -7,30 +7,35 @@ import { Batch } from "@/models/Batch"; // Import Batch model
 import { Semester } from "@/models/Semester"; // Import Semester model
 import { getAuthUserFromRequest, requireRoles } from "@/lib/rbac";
 import { Assignment } from "@/models/Assignment";
-import { StudentAssignmentSubmission } from "@/models/StudentAssignmentSubmission";
+
 import { Exam } from "@/models/Exam";
 
 const createSchema = z.object({ courseId: z.string().min(1), batchId: z.string().min(1), semesterId: z.string().min(1) });
 
 export async function GET(req: NextRequest) {
-  await connectToDatabase();
-  const { searchParams } = new URL(req.url);
-  const batchId = searchParams.get("batchId");
-  const semesterId = searchParams.get("semesterId");
-  const id = searchParams.get("id");
-  
-  const q: any = {};
-  if (batchId) q.batchId = batchId;
-  if (semesterId) q.semesterId = semesterId;
-  if (id) q._id = id;
-  
-  const data = await CourseOffering.find(q)
-    .populate('courseId', 'title code')
-    .populate('batchId', 'title code')
-    .populate('semesterId', 'number title')
-    .lean();
+  try {
+    await connectToDatabase();
+    const { searchParams } = new URL(req.url);
+    const batchId = searchParams.get("batchId");
+    const semesterId = searchParams.get("semesterId");
+    const id = searchParams.get("id");
     
-  return Response.json({ courseOfferings: data });
+    const q: any = {};
+    if (batchId) q.batchId = batchId;
+    if (semesterId) q.semesterId = semesterId;
+    if (id) q._id = id;
+    
+    const data = await CourseOffering.find(q)
+      .populate('courseId', 'title code')
+      .populate('batchId', 'title code')
+      .populate('semesterId', 'number title')
+      .lean();
+    
+    return Response.json({ data: data });
+  } catch (error) {
+    console.error("Course Offerings API - Error:", error);
+    return Response.json({ error: "Failed to fetch course offerings" }, { status: 500 });
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -110,7 +115,6 @@ export async function DELETE(req: NextRequest) {
     const assignments = await Assignment.find({ courseOfferingId: id }).select("_id").lean();
     const assignmentIds = assignments.map(a => a._id);
     if (assignmentIds.length > 0) {
-      await StudentAssignmentSubmission.deleteMany({ assignmentId: { $in: assignmentIds } });
       await Assignment.deleteMany({ _id: { $in: assignmentIds } });
     }
     await Exam.deleteMany({ courseOfferingId: id });
